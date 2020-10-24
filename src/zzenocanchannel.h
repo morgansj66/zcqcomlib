@@ -144,8 +144,7 @@ private:
     // std::mutex timer_adjust_mutex;
     uint base_clock_divisor;
 
-    friend class VxZenoUSBDevice;
+    friend class ZZenoUSBDevice;
 };
-
 
 #endif /* ZZENOCANCHANNEL_H_ */

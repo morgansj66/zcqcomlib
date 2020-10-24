@@ -1,37 +1,40 @@
-/******
- ***
- **
- **  8P d8P
- **  P d8P  8888 8888 888,8,  ,"Y88b  e88 888  e88 88e  888 8e
- **   d8P d 8888 8888 888 "  "8" 888 d888 888 d888 888b 888 88b
- **  d8P d8 Y888 888P 888    ,ee 888 Y888 888 Y888 888P 888 888
- ** d8P d88  "88 88"  888    "88 888  "88 888  "88 88"  888 888
- **                                    ,  88P
- **                                   "8",P"
- **
- ** Copyright Zuragon Ltd (R)
- **
- ** This Software Development Kit (SDK) is Subject to the payment of the
- ** applicable license fees and have been granted to you on a non-exclusive,
- ** non-transferable basis to use according to Zuragon General Terms 2014.
- ** Zuragon Technologies Ltd reserves any and all rights not expressly
- ** granted to you.
- **
- ***
- *****/
+/*
+ *             Copyright 2020 by Morgan
+ *
+ * This software BSD-new. See the included COPYING file for details.
+ *
+ * License: BSD-new
+ * ==============================================================================
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the \<organization\> nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
 
 #ifndef ZENOCAN_H
 #define ZENOCAN_H
 
-#if defined(__XC16__) || defined(__XC8__)
-#include <xc.h>
-typedef uint8_t quint8;
-typedef uint16_t quint16;
-typedef uint32_t quint32;
-typedef uint64_t quint64;
-#else
-#include <QtGlobal>
-#endif
+#include "zglobal.h"
+#include <stdint.h>
 
 #define ZENO_CMD_SIZE 32
 #define ZENO_EXT_CMD_SIZE 64
@@ -85,15 +88,6 @@ enum ZenoCmdID {
     ZENO_CMD_LIN_TX_ACK,
     ZENO_CMD_LIN_RX_MESSAGE,
     
-    /* FW update */
-    ZENO_CMD_FLASH_START,
-    ZENO_CMD_FLASH_READ_ROW_TO_BUFFER,
-    ZENO_CMD_FLASH_READ_ROW_FROM_BUFFER,
-    ZENO_CMD_FLASH_WRITE_TO_BUFFER,
-    ZENO_CMD_FLASH_ERASE_ROW,
-    ZENO_CMD_FLASH_WRITE_ROW_FROM_BUFFER,
-    ZENO_CMD_FLASH_FINISH,
-
     /* CAN FD */
     ZENO_CMD_SET_DATA_BIT_TIMING,
 
@@ -158,361 +152,360 @@ enum ZenoOpModeID {
 #pragma pack(push, 1)
 
 typedef struct {
-    quint8 cmd_id;
-    quint8 transaction_id;
+    uint8_t cmd_id;
+    uint8_t transaction_id;
 } ZenoHeader;
 
 typedef struct {
     ZenoHeader h;
 
     /* Up to 30 bytes payload */
-    quint8 cmd_payload[30];
+    uint8_t cmd_payload[30];
 } ZenoCmd;
 
 typedef struct {
     ZenoHeader h;
 
     /* Up to 14 bytes payload */
-    quint8 cmd_payload[14];
+    uint8_t cmd_payload[14];
 } ZenoIntCmd;
 
 typedef struct {
     ZenoHeader h;
     
-    quint32 clock_value_t0;
-    quint64 clock_value_t1;
-    quint8 clock_divisor;
-    quint8 usb_overflow_count;
+    uint32_t clock_value_t0;
+    uint64_t clock_value_t1;
+    uint8_t clock_divisor;
+    uint8_t usb_overflow_count;
 } ZenoIntClockInfoCmd;
 
 typedef struct {
     ZenoHeader h;
-    quint8 response_cmd_id;
-    quint8 cmd_result_code;
+    uint8_t response_cmd_id;
+    uint8_t cmd_result_code;
 
-    quint8 response_payload[28];
+    uint8_t response_payload[28];
 } ZenoResponse;
 
 typedef struct {
     ZenoHeader h;
-    quint8 response_cmd_id;
-    quint8 cmd_result_code;
+    uint8_t response_cmd_id;
+    uint8_t cmd_result_code;
 
-    quint32 capabilities;
+    uint32_t capabilities;
 
-    quint32 fw_version;
-    quint32 serial_number;
+    uint32_t fw_version;
+    uint32_t serial_number;
 
-    quint8 can_channel_count;
-    quint8 lin_channel_count;
+    uint8_t can_channel_count;
+    uint8_t lin_channel_count;
 
-    quint8 hw_revision;
-    quint8 type_code;
+    uint8_t hw_revision;
+    uint8_t type_code;
 
-    quint16 clock_resolution; /* In Khz */
+    uint16_t clock_resolution; /* In Khz */
     
     /* Fill up up to 32 bytes */
-    quint8 unused[10];
+    uint8_t unused[10];
 } ZenoInfoResponse;
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
+    uint8_t channel;
     
     /* Fill up up to 32 bytes */
-    quint8 unused[29];
+    uint8_t unused[29];
 } ZenoReadClock;
 
 typedef struct {
     ZenoHeader h;
-    quint8 response_cmd_id;
-    quint8 cmd_result_code;
+    uint8_t response_cmd_id;
+    uint8_t cmd_result_code;
     
-    quint64 clock_value;
-    quint32 clock_wrap_around_count;
-    quint8 read_count;
-    quint8 divisor;
+    uint64_t clock_value;
+    uint32_t clock_wrap_around_count;
+    uint8_t read_count;
+    uint8_t divisor;
     
-    quint8 unused[10];
+    uint8_t unused[10];
 } ZenoReadClockResponse;
 
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
-    quint8 base_clock_divisor;
-    quint8 can_fd_mode;
-    quint8 can_fd_non_iso;
+    uint8_t channel;
+    uint8_t base_clock_divisor;
+    uint8_t can_fd_mode;
+    uint8_t can_fd_non_iso;
 
     /* Fill up up to 32 bytes */
-    quint8 unused[28];
+    uint8_t unused[28];
 } ZenoOpen;
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
-    quint8 base_clock_divisor;
-    quint8 is_master;
+    uint8_t channel;
+    uint8_t base_clock_divisor;
+    uint8_t is_master;
     
     /* Fill up up to 32 bytes */
-    quint8 unused[27];
+    uint8_t unused[27];
 } ZenoLinOpen;
 
 typedef struct {
     ZenoHeader h;
-    quint8 response_cmd_id;
-    quint8 cmd_result_code;
+    uint8_t response_cmd_id;
+    uint8_t cmd_result_code;
     
-    quint64 clock_start_ref;
-    quint16 max_pending_tx_msgs;
+    uint64_t clock_start_ref;
+    uint16_t max_pending_tx_msgs;
 
-    quint8 base_clock_divisor;
+    uint8_t base_clock_divisor;
 
     /* Fill up up to 32 bytes */
-    quint8 unused[17];
+    uint8_t unused[17];
 } ZenoOpenResponse;
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
+    uint8_t channel;
 
     /* Fill up up to 32 bytes */
-    quint8 unused[29];
+    uint8_t unused[29];
 } ZenoClose;
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
+    uint8_t channel;
 
     /* Fill up up to 32 bytes */
-    quint8 unused[29];
+    uint8_t unused[29];
 } ZenoBusOn;
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
+    uint8_t channel;
 
     /* Fill up up to 32 bytes */
-    quint8 unused[29];
+    uint8_t unused[29];
 } ZenoBusOff;
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
+    uint8_t channel;
 
-    quint8 brp;
-    quint8 tseg1;
-    quint8 tseg2;
-    quint8 sjw;
+    uint8_t brp;
+    uint8_t tseg1;
+    uint8_t tseg2;
+    uint8_t sjw;
 
     /* For ECAN1 and ECAN2 */
-    quint8  cancks; /* 1: FCAN = 2 * Fp - 0: FCAN = Fp */
-    quint16 cicfg1;
-    quint16 cicfg2;
+    uint8_t  cancks; /* 1: FCAN = 2 * Fp - 0: FCAN = Fp */
+    uint16_t cicfg1;
+    uint16_t cicfg2;
     
     /* CAN FD - Transmitter delay compensation */
-    quint8 tdc_offset;
-    quint8 tdc_value;
-    quint8 tdc_ssp_mode_off;
+    uint8_t tdc_offset;
+    uint8_t tdc_value;
+    uint8_t tdc_ssp_mode_off;
 
     /* Fill up up to 32 bytes */
-    quint8 unused[17];
+    uint8_t unused[17];
 } ZenoBitTiming;
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
-    quint8 unused1;
+    uint8_t channel;
+    uint8_t unused1;
     
-    quint16 bitrate;
+    uint16_t bitrate;
 
     /* Fill up up to 32 bytes */
-    quint8 unused2[26];    
+    uint8_t unused2[26];
 } ZenoLinBitrate;
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
-    quint8 unused1;
+    uint8_t channel;
+    uint8_t unused1;
 
     /* Fill up up to 32 bytes */
-    quint8 unused2[28];
+    uint8_t unused2[28];
 } ZenoLinResetAutoBaud;
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
-    quint8 op_mode;
+    uint8_t channel;
+    uint8_t op_mode;
 
     /* Fill up up to 32 bytes */
-    quint8 unused[29];
+    uint8_t unused[29];
 } ZenoOpMode;
 
 typedef struct {
     ZenoHeader h;
     
-    quint8 trans_id;
-    quint8 flags;
+    uint8_t trans_id;
+    uint8_t flags;
     
-    quint32 id;
-    quint32 timestamp;
+    uint32_t id;
+    uint32_t timestamp;
     
-    quint8 data[8];
+    uint8_t data[8];
 
-    quint8 dlc;
-    quint8 channel;
+    uint8_t dlc;
+    uint8_t channel;
 
-    quint32 timestamp_msb;
+    uint32_t timestamp_msb;
 
     /* Fill up up to 32 bytes */
-    quint8 unused2[6];
+    uint8_t unused2[6];
 } ZenoCAN20Message;
 
 typedef struct {
     ZenoHeader h;
 
-    quint8 trans_id;
-    quint8 flags;
+    uint8_t trans_id;
+    uint8_t flags;
 
-    quint8 pid;
-    quint8 checksum;
+    uint8_t pid;
+    uint8_t checksum;
     
-    quint64 timestamp_start;
-    quint64 timestamp_end;
+    uint64_t timestamp_start;
+    uint64_t timestamp_end;
     
-    quint8 data[8];
+    uint8_t data[8];
 
-    quint8 dlc;
-    quint8 channel;
+    uint8_t dlc;
+    uint8_t channel;
  } ZenoLINMessage;
 
 typedef struct {
     ZenoHeader h;
 
-    quint8 trans_id;
-    quint8 flags;
+    uint8_t trans_id;
+    uint8_t flags;
 
-    quint32 id;
-    quint32 timestamp;
+    uint32_t id;
+    uint32_t timestamp;
 
-    quint8 data[18];
+    uint8_t data[18];
 
-    quint8 dlc;
-    quint8 channel;
+    uint8_t dlc;
+    uint8_t channel;
 } ZenoCANFDMessageP1;
 
 typedef struct {
     ZenoHeader h;
     
-    quint8 trans_id;
-    quint8 channel;
+    uint8_t trans_id;
+    uint8_t channel;
 
-    quint8 data[28];
+    uint8_t data[28];
 } ZenoCANFDMessageP2;
 
 typedef struct {
     ZenoHeader h;
 
-    quint8 trans_id;
-    quint8 channel;
+    uint8_t trans_id;
+    uint8_t channel;
 
-    quint8 data[18];
+    uint8_t data[18];
 
     /* Fill up up to 32 bytes */
-    quint8 unused[10];
+    uint8_t unused[10];
 } ZenoCANFDMessageP3;
 
 typedef struct {
     ZenoHeader h;
 
-    quint32 id;
-    quint32 flags;
+    uint32_t id;
+    uint32_t flags;
 
-    quint8 dlc;
-    quint8 channel;
+    uint8_t dlc;
+    uint8_t channel;
 
-    quint8 data[8];
+    uint8_t data[8];
 
     /* Fill up up to 32 bytes */
-    quint8 unused2[12];
+    uint8_t unused2[12];
 } ZenoTxCAN20Request;
 
 typedef struct {
     ZenoHeader h;
 
-    quint8 pid;
-    quint8 is_master_request;
-    quint32 flags;
+    uint8_t pid;
+    uint8_t is_master_request;
+    uint32_t flags;
 
-    quint8 dlc;
-    quint8 channel;
+    uint8_t dlc;
+    uint8_t channel;
 
-    quint8 data[8];
+    uint8_t data[8];
 
     /* Fill up up to 32 bytes */
-    quint8 unused2[14];
+    uint8_t unused2[14];
 } ZenoTxLINRequest;
 
 typedef struct {
     ZenoHeader h;
 
-    quint32 id;
-    quint32 flags;
+    uint32_t id;
+    uint32_t flags;
 
-    quint8 dlc;
-    quint8 channel;
+    uint8_t dlc;
+    uint8_t channel;
 
-    quint8 data[20];
+    uint8_t data[20];
 } ZenoTxCANFDRequestP1;
 
 typedef struct {
     ZenoHeader h;
 
-    quint8 dlc;
-    quint8 channel;
+    uint8_t dlc;
+    uint8_t channel;
 
-    quint8 data[28];
+    uint8_t data[28];
 } ZenoTxCANFDRequestP2;
 
 typedef struct {
     ZenoHeader h;
 
-    quint8 dlc;
-    quint8 channel;
+    uint8_t dlc;
+    uint8_t channel;
 
-    quint8 data[16];
+    uint8_t data[16];
 } ZenoTxCANFDRequestP3;
 
 typedef struct {
     ZenoHeader h;
-    quint8 trans_id;
-    quint8 flags;
+    uint8_t trans_id;
+    uint8_t flags;
     
-    quint32 id;
-    quint32 timestamp;
+    uint32_t id;
+    uint32_t timestamp;
 
-    quint8 dlc;
-    quint8 channel;
+    uint8_t dlc;
+    uint8_t channel;
     
-    quint32 timestamp_msb;
+    uint32_t timestamp_msb;
 
     /* Fill up up to 32 bytes */    
-    quint8 unused2[10];
+    uint8_t unused2[10];
 } ZenoTxCANRequestAck;
 
 typedef struct {
     ZenoHeader h;
-    quint8 trans_id;
-    quint8 flags;
+    uint8_t trans_id;
+    uint8_t flags;
     
-    quint64 timestamp_start;
-    quint64 timestamp_end;
-    quint8 channel;
+    uint64_t timestamp_start;
+    uint64_t timestamp_end;
+    uint8_t channel;
     
     /* Fill up up to 32 bytes */    
-    quint8 unused2[11];       
+    uint8_t unused2[11];
 } ZenoTxLINRequestAck;
-
 
 typedef struct {
     ZenoHeader h;
@@ -523,96 +516,32 @@ typedef struct {
     ZenoHeader h;
 
     /*  Debug msg */
-    quint8 debug_msg[30];
+    uint8_t debug_msg[30];
 } ZenoDebug;
 
 typedef struct {
     ZenoHeader h;
 
     /* Fill up up to 32 bytes */
-    quint8 unused[30];
+    uint8_t unused[30];
 } ZenoStartStopClockInt;
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
-    quint8 pid;
+    uint8_t channel;
+    uint8_t pid;
     
     /* Fill up up to 32 bytes */
-    quint8 unused[28];
+    uint8_t unused[28];
 } ZenoLinClearMessage;
 
 typedef struct {
     ZenoHeader h;
-    quint8 channel;
+    uint8_t channel;
     
     /* Fill up up to 32 bytes */
-    quint8 unused[29];
+    uint8_t unused[29];
 } ZenoLinClearAllMessages;
-
-typedef struct {
-    ZenoHeader h;
-    quint16 start_code;
-    
-    /* Fill up up to 32 bytes */
-    quint8 unused[28];
-} ZenoFlashStart;
-
-typedef struct {
-    ZenoHeader h;
-    quint16 finish_code;
-    quint16 from_table;
-    quint16 page_count;
-
-    /* Fill up up to 32 bytes */
-    quint8 unused[24];
-} ZenoFlashFinish;
-
-typedef struct {
-    ZenoHeader h;
-    quint16 page;
-    quint16 offset;
-    
-    /* Fill up up to 32 bytes */
-    quint8 unused[26];
-} ZenoFlashReadRowToBuffer;
-
-typedef struct {
-    ZenoHeader h;
-    quint16 offset;    
-
-    /* Fill up up to 32 bytes */
-    quint8 unused[28];
-} ZenoFlashReadFromBuffer;
-
-typedef struct {
-    ZenoHeader h;
-    quint8 data[30];
-} ZenoFlashReadFromBufferResponse;
-
-typedef struct {
-    ZenoHeader h;
-    quint16 offset;    
-    quint8 data[28];
-} ZenoFlashWriteToBuffer;
-
-typedef struct {
-    ZenoHeader h;
-    quint16 page;
-    quint16 offset;
-    
-    /* Fill up up to 32 bytes */
-    quint8 unused[26];
-} ZenoFlashEraseRow;
-
-typedef struct {
-    ZenoHeader h;
-    quint16 page;
-    quint16 offset;
-    
-    /* Fill up up to 32 bytes */
-    quint8 unused[26];
-} ZenoFlashWriteRowFromBuffer;
 
 #pragma pack(pop)
 

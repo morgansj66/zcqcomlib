@@ -38,7 +38,7 @@
 #include "zenocan.h"
 #include <libusb.h>
 
-#include <list>
+#include <vector>
 #include <condition_variable>
 #include <mutex>
 
@@ -69,24 +69,18 @@ public:
     bool isOpen() const;
 
     int getCANChannelCount() const;
-    ZRef<ZCANChannel> getCANChannel(int channel_index);
+    ZRef<ZCANChannel> getCANChannel(unsigned int channel_index);
 
     int getLINChannelCount() const;
-    ZRef<ZLINChannel> getLINChannel(int channel_index);
+    ZRef<ZLINChannel> getLINChannel(unsigned int channel_index);
 
-    quint32 getSerialNumber() const;
+    uint32_t getSerialNumber() const;
 
-    quint32 getFWVersion() const;
+    uint32_t getFWVersion() const;
 
     bool sendAndWhaitReply(ZenoCmd* request, ZenoResponse* reply);
     bool queueRequest(ZenoCmd* request, int timeout_in_ms = ZENO_USB_TX_TIMEOUT);
     bool queueTxRequest(ZenoCmd* request, int timeout_in_ms = ZENO_USB_TX_TIMEOUT);
-
-    bool startFlash();
-    bool readFlashPage(quint16 page, quint16 offset, quint8* data);
-    bool eraseFlashPage(quint16 page, quint16 offset);
-    bool writeFlashPage(quint16 page, quint16 offset, const quint8* data);
-    bool endFlash(quint16 finish_code, quint16 from_table, quint16 page_count);
 
     int getNextTransactionID() const {
         return next_transaction_id;
@@ -96,11 +90,11 @@ public:
         return zeno_clock_resolution;
     }
 
-    VxZenoCANDriver* getZenoDriver() const {
+    ZZenoCANDriver* getZenoDriver() const {
         return driver;
     }
 
-    VxZenoLINDriver* getZenoLINDriver() const;
+    ZZenoLINDriver* getZenoLINDriver() const;
 
     bool isDeviceGoneOrDisconnected() const {
         return device_gone_or_disconnected;
@@ -113,18 +107,18 @@ public:
 protected:
     void freeTransfers();
     int getNextTransferIndex();
-    bool waitForBulkTransfer(int timeout_in_ms);
+    bool waitForBulkTransfer(std::unique_lock<std::mutex>& lock, int timeout_in_ms);
     void handleIncomingData(int bytes_transferred);
     void handleInterruptData();
     void handleCommand(ZenoCmd* zeno_cmd);
     void startClockInt();
     void stopClockInt();
 
-    VxZenoCANDriver* driver;
-    VxUSBContext* usb_context;
+    ZZenoCANDriver* driver;
+    ZUSBContext* usb_context;
     bool device_gone_or_disconnected;
 
-    mutable QMutex device_mutex;
+    mutable std::mutex device_mutex;
     int device_no;
     int open_ref_count;
 
@@ -132,61 +126,55 @@ protected:
     libusb_device_handle* handle;
 
     /* USB incoming data from device */
-    quint8 in_end_point_address;
-    quint8 in_end_point_interrupt_address;
+    uint8_t in_end_point_address;
+    uint8_t in_end_point_interrupt_address;
     int in_max_packet_size;
     int in_bulk_transfer_complete;
     int in_interrupt_transfer_complete;
     libusb_transfer* in_bulk_transfer;
     libusb_transfer* in_interrupt_transfer;
-    quint8* in_buffer;
-    quint8 in_interrupt_buffer[16];
+    uint8_t* in_buffer;
+    uint8_t in_interrupt_buffer[16];
 
     /* USB outgoing data from device */
-    quint8 out_end_point_address;
+    uint8_t out_end_point_address;
     int out_max_packet_size;
-    quint8* out_buffer[2];
+    uint8_t* out_buffer[2];
     libusb_transfer* out_bulk_transfer[2];
 
     int next_transfer_index;
     int bulk_out_transfer_completed;
-    QMutex out_transfer_mutex;
-    QWaitCondition out_transfer_cond;
+    std::mutex out_transfer_mutex;
+    std::condition_variable out_transfer_cond;
 
-    QList<VxReference<VxZenoCANChannel> > can_channel_list;
-    QList<VxReference<VxZenoLINChannel> > lin_channel_list;
-    QString display_name;
+    std::vector<ZRef<ZZenoCANChannel> > can_channel_list;
+    std::vector<ZRef<ZZenoLINChannel> > lin_channel_list;
+    std::string display_name;
 
-    mutable QString last_error_text;
+    mutable std::string last_error_text;
 
     /* Reply state */
     int reply_timeout_in_ms;
-    quint8 reply_cmd_id;
+    uint8_t reply_cmd_id;
     int reply_received;
     ZenoResponse* reply_command;
-    QMutex send_reply_mutex;
-    QMutex command_mutex;
-    QWaitCondition command_cond;
+    std::mutex send_reply_mutex;
+    std::mutex command_mutex;
+    std::condition_variable command_cond;
 
     /* Card info */
-    quint8 next_transaction_id;
+    uint8_t next_transaction_id;
     int zeno_clock_resolution;
     uint serial_number;
     uint fw_version;
 
     /* Clock info */
-    qint64 t2_clock_start_ref_in_us;
+    uint64_t t2_clock_start_ref_in_us;
     int init_calibrate_count;
     int drift_time_in_us;
 
-    /* Flash, FW update */
-    QMutex read_flash_buffer_mutex;
-    QWaitCondition read_flash_buffer_cond;
-    ZenoFlashReadFromBufferResponse read_flash_buffer_response;
-    int read_reply_received;
-
 private:
-    bool ___queueRequestUnlocked(ZenoCmd* request, int timeout_in_ms);
+    bool ___queueRequestUnlocked(ZenoCmd* request, std::unique_lock<std::mutex>& lock, int timeout_in_ms);
     static void __inBulkTransferCallback(libusb_transfer* in_bulk_transfer);
     static void __inInterruptTransferCallback(libusb_transfer* in_interrupt_transfer);
     static void __outBulkTransferCallback(libusb_transfer* out_bulk_transfer);

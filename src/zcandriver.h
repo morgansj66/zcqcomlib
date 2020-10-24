@@ -45,6 +45,8 @@ protected:
     }
 
 public:
+    virtual ~ZCANDriver() { /* no op */ }
+
     virtual const std::string getObjectText() const = 0;
     virtual int getNumberOfChannels() = 0;
     virtual const std::string getChannelName(int channel_index) = 0;

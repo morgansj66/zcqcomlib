@@ -34,17 +34,20 @@
 #include "zzenocandriver.h"
 #include "zusbcontext.h"
 #include "zdebug.h"
+#include <string.h>
+#include <assert.h>
+#include <chrono>
 
-ZZenoUSBDevice::ZZenoUSBDevice(VxZenoCANDriver* _driver,
-                                 int _device_no, libusb_device* _device,
-                                 const QString& _display_name)
-: driver(_driver), usb_context(new VxUSBContext(driver->getUSBContext(),this)),
+ZZenoUSBDevice::ZZenoUSBDevice(ZZenoCANDriver* _driver,
+                               int _device_no, libusb_device* _device,
+                               const std::string& _display_name)
+: driver(_driver), usb_context(new ZUSBContext(driver->getUSBContext())),
   device_gone_or_disconnected(false),
   device_no(_device_no), open_ref_count(0),
   device(_device), handle(nullptr),
   in_end_point_address(0), in_end_point_interrupt_address(0), in_max_packet_size(0),
   in_bulk_transfer_complete(0), in_interrupt_transfer_complete(0),
-  in_bulk_transfer(nullptr), in_buffer(new quint8[ZENO_USB_MAX_PACKET_IN]),
+  in_bulk_transfer(nullptr), in_buffer(new uint8_t[ZENO_USB_MAX_PACKET_IN]),
   out_end_point_address(0), display_name(_display_name),
   reply_timeout_in_ms(1000), reply_cmd_id(0), reply_received(0), reply_command(nullptr),
   next_transaction_id(0),
@@ -53,8 +56,7 @@ ZZenoUSBDevice::ZZenoUSBDevice(VxZenoCANDriver* _driver,
   fw_version(0),
   t2_clock_start_ref_in_us(0),
   init_calibrate_count(0),
-  drift_time_in_us(0),
-  read_reply_received(0)
+  drift_time_in_us(0)
 {
     libusb_ref_device(device);
     int res;
@@ -62,20 +64,20 @@ ZZenoUSBDevice::ZZenoUSBDevice(VxZenoCANDriver* _driver,
 
     res = libusb_get_config_descriptor(device,0,&config);
     if ( res ) {
-        last_error_text = VxUSBContext::translateLibUSBErrorCode(res);
+        last_error_text = ZUSBContext::translateLibUSBErrorCode(res);
         device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-        qCritical() << "ERROR(ZenoUSB) get active configuration failed: " << last_error_text;
+        zCritical("(ZenoUSB) get active configuration failed: %s", last_error_text.c_str());
         return;
     }
 
     if ( config->bNumInterfaces < 2 ) {
-        qCritical() << "ERROR(ZenoUSB): bNumInterfaces " << config->bNumInterfaces;
+        zCritical("(ZenoUSB): bNumInterfaces %d", config->bNumInterfaces);
         libusb_free_config_descriptor(config);
         return;
     }
 
     if ( config->interface[0].num_altsetting < 1 ) {
-        qCritical() << "ERROR(ZenoUSB): interface 0 -> num_altsetting " << config->interface[0].num_altsetting;
+        zCritical("(ZenoUSB): interface 0 -> num_altsetting %d",config->interface[0].num_altsetting);
         libusb_free_config_descriptor(config);
         return;
     }
@@ -85,8 +87,8 @@ ZZenoUSBDevice::ZZenoUSBDevice(VxZenoCANDriver* _driver,
     /* Interface 0 */
     for ( int i = 0; i < interface->bNumEndpoints; ++i ) {
         const libusb_endpoint_descriptor* end_point = interface->endpoint + i;
-        qDebug() << "end_point->bEndpointAddress" << hex << end_point->bEndpointAddress;
-        qDebug() << "end_point->bmAttributes" << hex << end_point->bmAttributes;
+        zDebug("end_point->bEndpointAddress: %x", end_point->bEndpointAddress);
+        zDebug("end_point->bmAttributes: %x", end_point->bmAttributes);
 
         if ( !in_end_point_address &&
              (end_point->bEndpointAddress & LIBUSB_ENDPOINT_IN) &&
@@ -103,22 +105,22 @@ ZZenoUSBDevice::ZZenoUSBDevice(VxZenoCANDriver* _driver,
         }
     }
 
-    qDebug() << " -- in address: " << in_end_point_address << " -- out address: " << out_end_point_address;
-    qDebug() << " -- Max in: " << in_max_packet_size << " Max out: " << out_max_packet_size;
+    zDebug(" -- in address: %d -- out address: %d", in_end_point_address, out_end_point_address);
+    zDebug(" -- Max in: %d Max out: %d", in_max_packet_size, out_max_packet_size);
 
     /* Interface 1 */
     interface = config->interface[1].altsetting;
-    qDebug() << "Interface 1 bNumEndpoints" << interface->bNumEndpoints;
+    zDebug("Interface 1 bNumEndpoints: %d", interface->bNumEndpoints);
     if ( interface->bNumEndpoints > 0 ) {
         /* Assume only 1 IN interrupt end-point */
         in_end_point_interrupt_address = interface->endpoint->bEndpointAddress;
-        qDebug() << "Intterrupt end-point address:" << interface->endpoint->bEndpointAddress;
+        zDebug("Intterrupt end-point address: %d", interface->endpoint->bEndpointAddress);
     }
 
     libusb_free_config_descriptor(config);
 
-    out_buffer[0] = new quint8[ZENO_USB_MAX_PACKET_OUT];
-    out_buffer[1] = new quint8[ZENO_USB_MAX_PACKET_OUT];
+    out_buffer[0] = new uint8_t[ZENO_USB_MAX_PACKET_OUT];
+    out_buffer[1] = new uint8_t[ZENO_USB_MAX_PACKET_OUT];
     out_bulk_transfer[0] = nullptr;
     out_bulk_transfer[1] = nullptr;
     bulk_out_transfer_completed = 0;
@@ -127,7 +129,7 @@ ZZenoUSBDevice::ZZenoUSBDevice(VxZenoCANDriver* _driver,
     retrieveDeviceInfo();
 }
 
-VxZenoUSBDevice::~VxZenoUSBDevice()
+ZZenoUSBDevice::~ZZenoUSBDevice()
 {
     if ( handle != nullptr ) close();
     libusb_unref_device(device);
@@ -136,7 +138,7 @@ VxZenoUSBDevice::~VxZenoUSBDevice()
     delete[] out_buffer[1];
 }
 
-void VxZenoUSBDevice::retrieveDeviceInfo()
+void ZZenoUSBDevice::retrieveDeviceInfo()
 {
     if (!open()) return;
 
@@ -145,27 +147,27 @@ void VxZenoUSBDevice::retrieveDeviceInfo()
     memset(&cmd, 0, sizeof(cmd));
     cmd.h.cmd_id = ZENO_CMD_RESET;
 
-    qDebug() << "Sending reset";
+    zDebug("Sending reset");
     if  ( !sendAndWhaitReply(&cmd, &reply) ) {
-        qCritical() << "ERROR(ZenoUSB): failed to reset device " << last_error_text;
+        zCritical("(ZenoUSB): failed to reset device: %s",last_error_text.c_str());
         close();
         return;
     }
 
     cmd.h.cmd_id = ZENO_CMD_INFO;
     if  ( !sendAndWhaitReply(&cmd, &reply) ) {
-        qCritical() << "ERROR(ZenoUSB): failed to retrieve device info" << last_error_text;
+        zError("(ZenoUSB): failed to retrieve device info: %s", last_error_text.c_str());
         close();
         return;
     }
 
     ZenoInfoResponse* info_response = reinterpret_cast<ZenoInfoResponse*>(&reply);
-    qDebug() << "Zeno Capabilities:" << hex << info_response->capabilities;
-    qDebug() << "       fw_version:" << hex << info_response->fw_version;
-    qDebug() << "        serial-nr:" << hex << info_response->serial_number;
-    qDebug() << "          clock @:" << (float(info_response->clock_resolution) / 1000.0f) << "Mhz";
-    qDebug() << "CAN channel count:" << info_response->can_channel_count;
-    qDebug() << "LIN channel count:" << info_response->lin_channel_count;
+    zDebug("Zeno Capabilities: %x", info_response->capabilities);
+    zDebug("       fw_version: %x", info_response->fw_version);
+    zDebug("        serial-nr: %x", info_response->serial_number);
+    zDebug("          clock @: %f", (float(info_response->clock_resolution) / 1000.0f) << "Mhz");
+    zDebug("CAN channel count: %d", info_response->can_channel_count);
+    zDebug("LIN channel count: %d", info_response->lin_channel_count);
 
     zeno_clock_resolution = info_response->clock_resolution;
     serial_number = info_response->serial_number;
@@ -173,53 +175,53 @@ void VxZenoUSBDevice::retrieveDeviceInfo()
 
     can_channel_list.clear();
     for( int i = 0; i < info_response->can_channel_count; ++i ) {
-        can_channel_list.append(new VxZenoCANChannel(i, this));
+        can_channel_list.push_back(new ZZenoCANChannel(i, this));
     }
 
     lin_channel_list.clear();
     int display_index = 1;
     for( int i = info_response->lin_channel_count-1; i >=0 ; --i ) {
-        lin_channel_list.append(new VxZenoLINChannel(i, display_index++, this));
+        lin_channel_list.push_back(new ZZenoLINChannel(i, display_index++, this));
     }
 
     close();
 }
 
-const QString VxZenoUSBDevice::getLastErrorText()
+const std::string ZZenoUSBDevice::getLastErrorText()
 {
     return last_error_text;
 }
 
-const QString VxZenoUSBDevice::getObjectText() const
+const std::string ZZenoUSBDevice::getObjectText() const
 {
     return display_name;
 }
 
-bool VxZenoUSBDevice::open()
+bool ZZenoUSBDevice::open()
 {
-    QMutexLocker lock(&device_mutex);
+    std::lock_guard<std::mutex> lock(device_mutex);
     if ( open_ref_count > 0 ) {
         open_ref_count ++;
         return true;
     }
 
-    Q_ASSERT(open_ref_count == 0);
-    Q_ASSERT(handle == NULL);
-    Q_ASSERT(in_bulk_transfer == NULL);
+    assert(open_ref_count == 0);
+    assert(handle == NULL);
+    assert(in_bulk_transfer == NULL);
 
     int res = libusb_open(device, &handle);
     if ( res ) {
-        last_error_text = VxUSBContext::translateLibUSBErrorCode(res);
+        last_error_text = ZUSBContext::translateLibUSBErrorCode(res);
         device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-        qDebug() << "ERROR(ZenoUSB) open failed: " << last_error_text;
+        zError("(ZenoUSB) open failed: %s", last_error_text.c_str());
         return false;
     }
 
     res = libusb_claim_interface(handle,0);
     if ( res ) {
-        last_error_text = VxUSBContext::translateLibUSBErrorCode(res);
+        last_error_text = ZUSBContext::translateLibUSBErrorCode(res);
         device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-        qDebug() << "ERROR(ZenoUSB) claim interface[0] failed: " << last_error_text;
+        zError("(ZenoUSB) claim interface[0] failed: %s", last_error_text.c_str());
 
         libusb_close(handle);
         handle = nullptr;
@@ -230,9 +232,9 @@ bool VxZenoUSBDevice::open()
 
     res = libusb_claim_interface(handle,1);
     if ( res ) {
-        last_error_text = VxUSBContext::translateLibUSBErrorCode(res);
+        last_error_text = ZUSBContext::translateLibUSBErrorCode(res);
         device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-        qDebug() << "ERROR(ZenoUSB) claim interface[1] failed: " << last_error_text;
+        zError("(ZenoUSB) claim interface[1] failed: %s", last_error_text.c_str());
 
         libusb_release_interface(handle, 0);
         libusb_close(handle);
@@ -249,9 +251,9 @@ bool VxZenoUSBDevice::open()
          in_interrupt_transfer == nullptr ||
          out_bulk_transfer[0] == nullptr ||
          out_bulk_transfer[1] == nullptr) {
-        last_error_text = VxUSBContext::translateLibUSBErrorCode(LIBUSB_ERROR_NO_MEM);
+        last_error_text = ZUSBContext::translateLibUSBErrorCode(LIBUSB_ERROR_NO_MEM);
         device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-        qDebug() << "ERROR(ZenoUSB) failed to allocate bulk in/out transfers";
+        zError("(ZenoUSB) failed to allocate bulk in/out transfers");
 
         freeTransfers();
         libusb_release_interface(handle, 1);
@@ -277,9 +279,9 @@ bool VxZenoUSBDevice::open()
 
     res = libusb_submit_transfer(in_bulk_transfer);
     if ( res ) {
-        last_error_text = VxUSBContext::translateLibUSBErrorCode(res);
+        last_error_text = ZUSBContext::translateLibUSBErrorCode(res);
         device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-        qDebug() << "ERROR(ZenoUSB) failed to submit bulk transfer: " << last_error_text;
+        zError("(ZenoUSB) failed to submit bulk transfer: %s", last_error_text.c_str());
 
         freeTransfers();
 
@@ -294,9 +296,9 @@ bool VxZenoUSBDevice::open()
 
     res = libusb_submit_transfer(in_interrupt_transfer);
     if ( res ) {
-        last_error_text = VxUSBContext::translateLibUSBErrorCode(res);
+        last_error_text = ZUSBContext::translateLibUSBErrorCode(res);
         device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-        qDebug() << "ERROR(ZenoUSB) failed to submit interrupt transfer: " << last_error_text;
+        zError("ERROR(ZenoUSB) failed to submit interrupt transfer: %s", last_error_text.c_str());
 
         freeTransfers();
 
@@ -316,7 +318,7 @@ bool VxZenoUSBDevice::open()
     return true;
 }
 
-void VxZenoUSBDevice::freeTransfers()
+void ZZenoUSBDevice::freeTransfers()
 {
     if ( in_bulk_transfer != nullptr ) libusb_free_transfer(in_bulk_transfer);
     if ( in_interrupt_transfer != nullptr ) libusb_free_transfer(in_interrupt_transfer);
@@ -329,7 +331,7 @@ void VxZenoUSBDevice::freeTransfers()
     out_bulk_transfer[1] = nullptr;
 }
 
-int VxZenoUSBDevice::getNextTransferIndex()
+int ZZenoUSBDevice::getNextTransferIndex()
 {
     int buffer_index;
     if ( next_transfer_index == -1 ) {
@@ -349,15 +351,15 @@ int VxZenoUSBDevice::getNextTransferIndex()
     return buffer_index;
 }
 
-bool VxZenoUSBDevice::close()
+bool ZZenoUSBDevice::close()
 {
-    QMutexLocker lock(&device_mutex);
-    Q_ASSERT(handle != NULL);
+    std::lock_guard<std::mutex> lock(device_mutex);
+    assert(handle != nullptr);
 
     if ( open_ref_count == 1 ) stopClockInt();
 
     open_ref_count--;
-    Q_ASSERT(open_ref_count >= 0);
+    assert(open_ref_count >= 0);
 
     if ( open_ref_count == 0 ) {
         libusb_cancel_transfer(in_bulk_transfer);
@@ -394,60 +396,60 @@ bool VxZenoUSBDevice::close()
     return true;
 }
 
-bool VxZenoUSBDevice::isOpen() const
+bool ZZenoUSBDevice::isOpen() const
 {
-    QMutexLocker lock(&device_mutex);
+    std::lock_guard<std::mutex> lock(device_mutex);
     return open_ref_count > 0;
 }
 
-int VxZenoUSBDevice::getCANChannelCount() const
+int ZZenoUSBDevice::getCANChannelCount() const
 {
     return can_channel_list.size();
 }
 
-VxReference<VxCANChannel> VxZenoUSBDevice::getCANChannel(int channel_index)
+ZRef<ZCANChannel> ZZenoUSBDevice::getCANChannel(unsigned int channel_index)
 {
     if ( channel_index < 0 || channel_index >= can_channel_list.size()) return nullptr;
-    return can_channel_list[channel_index].get();
+    return can_channel_list[channel_index].cast<ZCANChannel>();
 }
 
-int VxZenoUSBDevice::getLINChannelCount() const
+int ZZenoUSBDevice::getLINChannelCount() const
 {
     return lin_channel_list.size();
 }
 
-VxReference<VxLINChannel> VxZenoUSBDevice::getLINChannel(int channel_index)
+ZRef<ZLINChannel> ZZenoUSBDevice::getLINChannel(unsigned int channel_index)
 {
     if ( channel_index < 0 || channel_index >= lin_channel_list.size()) return nullptr;
-    return lin_channel_list[channel_index].get();
+    return lin_channel_list[channel_index].cast<ZLINChannel>();
 }
 
-quint32 VxZenoUSBDevice::getSerialNumber() const
+uint32_t ZZenoUSBDevice::getSerialNumber() const
 {
     return serial_number;
 }
 
-quint32 VxZenoUSBDevice::getFWVersion() const
+uint32_t ZZenoUSBDevice::getFWVersion() const
 {
     return fw_version;
 }
 
-bool VxZenoUSBDevice::sendAndWhaitReply(ZenoCmd* request, ZenoResponse* reply)
+bool ZZenoUSBDevice::sendAndWhaitReply(ZenoCmd* request, ZenoResponse* reply)
 {
-    Q_ASSERT(handle != nullptr);
-    QMutexLocker lock(&send_reply_mutex);
+    assert(handle != nullptr);
+    std::lock_guard<std::mutex> lock(send_reply_mutex);
 
     if (!queueRequest(request)) return false;
 
-    QMutexLocker command_lock(&command_mutex);
+    std::unique_lock<std::mutex> command_lock(command_mutex);
     reply_received = 0;
     reply_command = reply;
     reply_cmd_id = request->h.cmd_id;
 
-    // qDebug() << "Queue reqeust";
-
+    // qDebug() << "Queue reqeust";    
     while (!reply_received) {
-        if (!command_cond.wait(&command_mutex, reply_timeout_in_ms)) {
+        std::chrono::milliseconds reply_timeout(reply_timeout_in_ms);
+        if (command_cond.wait_for(command_lock, reply_timeout) == std::cv_status::timeout) {
             last_error_text = "Timeout waiting for reply";
             break;
         }
@@ -459,7 +461,7 @@ bool VxZenoUSBDevice::sendAndWhaitReply(ZenoCmd* request, ZenoResponse* reply)
     return (reply_received != 0);
 }
 
-bool VxZenoUSBDevice::___queueRequestUnlocked(ZenoCmd* request, int timeout_in_ms) {
+bool ZZenoUSBDevice::___queueRequestUnlocked(ZenoCmd* request, std::unique_lock<std::mutex>& lock, int timeout_in_ms) {
     int buffer_index = getNextTransferIndex();
     if ( buffer_index == -1) return false;
 
@@ -474,16 +476,16 @@ bool VxZenoUSBDevice::___queueRequestUnlocked(ZenoCmd* request, int timeout_in_m
         if ( next_transfer_index == -1 ) {
             int res = libusb_submit_transfer(out_bulk_transfer[buffer_index]);
             if ( res ) {
-                last_error_text = VxUSBContext::translateLibUSBErrorCode(res);
+                last_error_text = ZUSBContext::translateLibUSBErrorCode(res);
                 device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-                qDebug() << "ERROR(ZenoUSB) failed to submit bulk transfer: " << last_error_text;
+                zError("(ZenoUSB) failed to submit bulk transfer: %s", last_error_text.c_str());
                 return false;
             }
         }
 
-        qDebug() << "ZenoUSB: Wait for next bulk transfer";
+        zDebug("ZenoUSB: Wait for next bulk transfer");
         next_transfer_index = (buffer_index + 1) % 2;
-        if (!waitForBulkTransfer(timeout_in_ms)) return false;
+        if (!waitForBulkTransfer(lock, timeout_in_ms)) return false;
         buffer_index = next_transfer_index;
 
         offset = 0;
@@ -496,9 +498,9 @@ bool VxZenoUSBDevice::___queueRequestUnlocked(ZenoCmd* request, int timeout_in_m
         // qDebug() << "-- submit buffer_index: " << buffer_index;
         int res = libusb_submit_transfer(out_bulk_transfer[buffer_index]);
         if ( res ) {
-            last_error_text = VxUSBContext::translateLibUSBErrorCode(res);
+            last_error_text = ZUSBContext::translateLibUSBErrorCode(res);
             device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-            qDebug() << "ERROR(ZenoUSB) failed to submit bulk transfer: " << last_error_text;
+            zError("(ZenoUSB) failed to submit bulk transfer: %s", last_error_text.c_str());
             return false;
         }
         next_transfer_index = (buffer_index + 1) % 2;
@@ -511,216 +513,28 @@ bool VxZenoUSBDevice::___queueRequestUnlocked(ZenoCmd* request, int timeout_in_m
     return true;
 }
 
-bool VxZenoUSBDevice::queueRequest(ZenoCmd* request, int timeout_in_ms)
+bool ZZenoUSBDevice::queueRequest(ZenoCmd* request, int timeout_in_ms)
 {
-    QMutexLocker lock(&out_transfer_mutex);
-    request->h.transaction_id = quint8(next_transaction_id ++);
+    std::unique_lock<std::mutex> lock(out_transfer_mutex);
+    request->h.transaction_id = uint8_t(next_transaction_id ++);
 
-    return ___queueRequestUnlocked(request,timeout_in_ms);
+    return ___queueRequestUnlocked(request, lock, timeout_in_ms);
 }
 
-bool VxZenoUSBDevice::queueTxRequest(ZenoCmd* request, int timeout_in_ms)
+bool ZZenoUSBDevice::queueTxRequest(ZenoCmd* request, int timeout_in_ms)
 {
-    QMutexLocker lock(&out_transfer_mutex);
-    return ___queueRequestUnlocked(request,timeout_in_ms);
+    std::unique_lock<std::mutex> lock(out_transfer_mutex);
+    return ___queueRequestUnlocked(request, lock, timeout_in_ms);
 }
 
-bool VxZenoUSBDevice::startFlash()
+ZZenoLINDriver* ZZenoUSBDevice::getZenoLINDriver() const
 {
-    ZenoFlashStart cmd;
-    ZenoResponse reply;
-
-    if (!isOpen()) return false;
-
-    memset(&cmd,0,sizeof(ZenoFlashStart));
-    cmd.h.cmd_id = ZENO_CMD_FLASH_START;
-    cmd.start_code = 0x1442u;
-
-    if (!sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
-        qCritical() << "ERROR(KvUSB) failed to start FW udpate: " << last_error_text;
-        return false;
-    }
-
-    stopClockInt();
-
-    return true;
-}
-
-bool VxZenoUSBDevice::readFlashPage(quint16 page, quint16 offset, quint8* data)
-{
-    ZenoFlashReadRowToBuffer cmd;
-    ZenoResponse reply;
-
-    memset(&cmd,0,sizeof(ZenoFlashStart));
-    cmd.h.cmd_id = ZENO_CMD_FLASH_READ_ROW_TO_BUFFER;
-    cmd.page = page;
-    cmd.offset = offset;
-
-    if (!sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
-        qCritical() << "ERROR(KvUSB) failed to read flash-page: " << last_error_text;
-        return false;
-    }
-
-    quint16 data_offset = 0;
-    do {
-        QMutexLocker lock(&read_flash_buffer_mutex);
-        ZenoFlashReadFromBuffer read_cmd;
-
-        memset(&read_cmd,0,sizeof(ZenoFlashReadFromBuffer));
-        read_cmd.h.cmd_id = ZENO_CMD_FLASH_READ_ROW_FROM_BUFFER;
-        read_cmd.offset = data_offset;
-
-        read_reply_received = 0;
-        uint read_size;
-        if ( data_offset < 4080 ) read_size = 30;
-        else read_size = 16;
-
-        if (!queueRequest(zenoRequest(read_cmd))) return false;
-
-        while (!read_reply_received) {
-            if (!read_flash_buffer_cond.wait(&read_flash_buffer_mutex, reply_timeout_in_ms)) {
-                last_error_text = "Timeout waiting for reply";
-                return false;
-            }
-        }
-
-        memcpy(data + data_offset, read_flash_buffer_response.data, read_size);
-        data_offset += read_size;
-
-        // qDebug() << "data_offset" << data_offset << read_size << read_cmd.offset;
-
-        // QByteArray b = QByteArray::fromRawData(reinterpret_cast<const char*>(read_flash_buffer_response.data), read_size);
-        // qDebug() << "data" << b.toHex(' ');
-    } while ( data_offset < 4096);
-
-    return true;
-}
-
-bool VxZenoUSBDevice::eraseFlashPage(quint16 page, quint16 offset)
-{
-    ZenoFlashEraseRow cmd;
-    ZenoResponse reply;
-
-    memset(&cmd,0,sizeof(ZenoFlashStart));
-    cmd.h.cmd_id = ZENO_CMD_FLASH_ERASE_ROW;
-    cmd.page = page;
-    cmd.offset = offset;
-
-    if (!sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
-        qCritical() << "ERROR(KvUSB) failed to erase flash-page: " << last_error_text;
-        return false;
-    }
-
-    return true;
-}
-
-bool VxZenoUSBDevice::writeFlashPage(quint16 page, quint16 offset, const quint8* data)
-{
-    quint16 data_offset = 0;
-    ZenoResponse reply;
-
-    do {
-        ZenoFlashWriteToBuffer write_cmd;
-
-        memset(&write_cmd,0,sizeof(ZenoFlashWriteToBuffer));
-        write_cmd.h.cmd_id = ZENO_CMD_FLASH_WRITE_TO_BUFFER;
-        write_cmd.offset = data_offset;
-
-        uint write_size;
-        if ( data_offset < 4088 ) write_size = 28;
-        else write_size = 8;
-
-        memcpy(write_cmd.data, data + data_offset, write_size);
-
-        if (!sendAndWhaitReply(zenoRequest(write_cmd), zenoReply(reply))) {
-            qCritical() << "ERROR(KvUSB) failed to write to page buffer: " << last_error_text;
-            return false;
-        }
-        // qDebug() << "data_offset" << data_offset << write_size;
-        data_offset += write_size;
-    } while ( data_offset < 4096);
-
-#if 0
-    data_offset = 0;
-    do {
-        QMutexLocker lock(&read_flash_buffer_mutex);
-        ZenoFlashReadFromBuffer read_cmd;
-
-        memset(&read_cmd,0,sizeof(ZenoFlashReadFromBuffer));
-        read_cmd.h.cmd_id = ZENO_CMD_FLASH_READ_ROW_FROM_BUFFER;
-        read_cmd.offset = data_offset;
-
-        read_reply_received = 0;
-        uint read_size;
-        if ( data_offset < 4080 ) read_size = 30;
-        else read_size = 16;
-
-        if (!queueRequest(zenoRequest(read_cmd))) return false;
-
-        while (!read_reply_received) {
-            if (!read_flash_buffer_cond.wait(&read_flash_buffer_mutex, reply_timeout_in_ms)) {
-                last_error_text = "Timeout waiting for reply";
-                return false;
-            }
-        }
-
-        // memcpy(data + data_offset, read_flash_buffer_response.data, read_size);
-        data_offset += read_size;
-
-        qDebug() << "data_offset" << data_offset << read_size << read_cmd.offset;
-
-        QByteArray b = QByteArray::fromRawData(reinterpret_cast<const char*>(read_flash_buffer_response.data), read_size);
-        qDebug() << "data" << b.toHex(' ');
-    } while ( data_offset < 4096);
-#endif
-
-    ZenoFlashWriteRowFromBuffer write_flash_cmd;
-    memset(&write_flash_cmd,0,sizeof(ZenoFlashWriteRowFromBuffer));
-    write_flash_cmd.h.cmd_id = ZENO_CMD_FLASH_WRITE_ROW_FROM_BUFFER;
-    write_flash_cmd.page = page;
-    write_flash_cmd.offset = offset;
-
-    if (!sendAndWhaitReply(zenoRequest(write_flash_cmd), zenoReply(reply))) {
-        qCritical() << "ERROR(KvUSB) failed to write to flash page: " << last_error_text;
-        return false;
-    }
-
-    return true;
-}
-
-bool VxZenoUSBDevice::endFlash(quint16 finish_code, quint16 from_table, quint16 page_count)
-{
-    ZenoFlashFinish cmd;
-    ZenoResponse reply;
-
-    if (!isOpen()) return false;
-
-    memset(&cmd,0,sizeof(ZenoFlashFinish));
-    cmd.h.cmd_id = ZENO_CMD_FLASH_FINISH;
-    cmd.finish_code = finish_code;
-    cmd.from_table = from_table;
-    cmd.page_count = page_count;
-
-    if (!sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
-        qCritical() << "ERROR(KvUSB) failed to finish FW udpate: " << last_error_text;
-        return false;
-    }
-
-    if ( finish_code != 0x1445 ) {
-        startClockInt();
-    }
-
-    return true;
-}
-
-VxZenoLINDriver* VxZenoUSBDevice::getZenoLINDriver() const
-{
-    VxZenoLINDriver* lin_driver = driver->getZenoLINDriver();
-    Q_ASSERT(lin_driver != nullptr);
+    ZZenoLINDriver* lin_driver = driver->getZenoLINDriver();
+    assert(lin_driver != nullptr);
     return lin_driver;
 }
 
-bool VxZenoUSBDevice::waitForBulkTransfer(int timeout_in_ms)
+bool ZZenoUSBDevice::waitForBulkTransfer(std::unique_lock<std::mutex>& lock, int timeout_in_ms)
 {
     while (next_transfer_index != -1 &&
            out_bulk_transfer[next_transfer_index]->length > 0 ) {
@@ -729,7 +543,8 @@ bool VxZenoUSBDevice::waitForBulkTransfer(int timeout_in_ms)
 
         bulk_out_transfer_completed = 0;
         while (!bulk_out_transfer_completed) {
-            if (!out_transfer_cond.wait(&out_transfer_mutex, timeout_in_ms)) {
+            std::chrono::milliseconds timeout(timeout_in_ms);
+            if (out_transfer_cond.wait_for(lock, timeout) == std::cv_status::timeout) {
                 last_error_text = "Timeout, TX buffer overflow";
                 return false;
             }
@@ -742,7 +557,7 @@ bool VxZenoUSBDevice::waitForBulkTransfer(int timeout_in_ms)
     return true;
 }
 
-void VxZenoUSBDevice::handleIncomingData(int bytes_transferred)
+void ZZenoUSBDevice::handleIncomingData(int bytes_transferred)
 {
     int offset = 0;
     ZenoCmd* zeno_cmd;
@@ -759,31 +574,35 @@ void VxZenoUSBDevice::handleIncomingData(int bytes_transferred)
         handleCommand(zeno_cmd);
 
         if ( zeno_cmd->h.cmd_id == ZENO_CMD_RESPONSE) {
-            QMutexLocker lock(&command_mutex);
+            std::lock_guard<std::mutex> lock(command_mutex);
             if ( reply_command != nullptr ) {
 
                 ZenoResponse* response = reinterpret_cast<ZenoResponse*>(zeno_cmd);
                 if ( response->response_cmd_id == reply_cmd_id ) {
                     *reply_command = *response;
                     reply_received = 1;
-                    command_cond.wakeOne();
+                    command_cond.notify_one();
                 }
             }
         }
     }
+
+    auto t_now = std::chrono::steady_clock::now().time_since_epoch();
+
     // qDebug() << "URB done";
 }
 
-void VxZenoUSBDevice::handleInterruptData()
+void ZZenoUSBDevice::handleInterruptData()
 {
     ZenoIntCmd* zeno_int_cmd = reinterpret_cast<ZenoIntCmd*>(in_interrupt_buffer);
     switch(zeno_int_cmd->h.cmd_id) {
     case ZENO_CLOCK_INFO_INT:  {
-        quint64 host_t0 = VxTimerBase::getCurrentTimeInUs() - t2_clock_start_ref_in_us;
+        auto t_now = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch();
+        uint64_t host_t0 = t_now.count() - t2_clock_start_ref_in_us;
         ZenoIntClockInfoCmd* clock_info = reinterpret_cast<ZenoIntClockInfoCmd*>(zeno_int_cmd);
 
-        qint64 zeno_clock_in_us = clock_info->clock_value_t1 / clock_info->clock_divisor;
-        qint64 drift_in_us = zeno_clock_in_us - host_t0;
+        uint64_t zeno_clock_in_us = clock_info->clock_value_t1 / clock_info->clock_divisor;
+        uint64_t drift_in_us = zeno_clock_in_us - host_t0;
         // qint64 t0_d = qAbs((clock_info->clock_value_t1 & 0xffffffff) - clock_info->clock_value_t0) / clock_info->clock_divisor;
 
         // qDebug() << "Clock-info:" << zeno_clock_in_us << host_t0 << drift_in_us;
@@ -794,19 +613,19 @@ void VxZenoUSBDevice::handleInterruptData()
             drift_time_in_us += drift_in_us;
             if ( init_calibrate_count == 0 ) {
                 drift_time_in_us /= 5;
-                qDebug() << "Avg drift:" << drift_time_in_us;
+                zDebug("Avg drift: %d", drift_time_in_us);
                 t2_clock_start_ref_in_us -= drift_time_in_us;
             }
         }
         else {
-            foreach(auto channel, can_channel_list) {
+            for(auto channel : can_channel_list) {
                 if (!channel->is_open) continue;
                 if (!channel->initial_timer_adjustment_done) continue;
 
-                qint64 device_clock_in_us = zeno_clock_in_us - channel->open_start_ref_timestamp_in_us;
-                device_clock_in_us -= channel->getInitialTimeAdjustInUs();
-                channel->ajdustDeviceTimeDrift(device_clock_in_us,
-                                               drift_in_us);
+                uint64_t device_clock_in_us = zeno_clock_in_us - channel->open_start_ref_timestamp_in_us;
+                // device_clock_in_us -= channel->getInitialTimeAdjustInUs();
+                // channel->ajdustDeviceTimeDrift(device_clock_in_us,
+                //                                drift_in_us);
             }
         }
         break;
@@ -816,7 +635,7 @@ void VxZenoUSBDevice::handleInterruptData()
     }
 }
 
-void VxZenoUSBDevice::handleCommand(ZenoCmd* zeno_cmd)
+void ZZenoUSBDevice::handleCommand(ZenoCmd* zeno_cmd)
 {
     // qDebug() << zeno_cmd->h.cmd_id;
     switch(zeno_cmd->h.cmd_id) {
@@ -825,7 +644,7 @@ void VxZenoUSBDevice::handleCommand(ZenoCmd* zeno_cmd)
         // qDebug() << "TX ack " << zeno_tx_ack->trans_id << zeno_tx_ack->dlc << zeno_tx_ack->id << zeno_tx_ack->timestamp;
 
         if ( zeno_tx_ack->channel < can_channel_list.size()) {
-            static_cast<VxZenoCANChannel*>(can_channel_list[zeno_tx_ack->channel].get())->txAck(*zeno_tx_ack);
+            static_cast<ZZenoCANChannel*>(can_channel_list[zeno_tx_ack->channel].get())->txAck(*zeno_tx_ack);
         }
         break;
     }
@@ -912,17 +731,8 @@ void VxZenoUSBDevice::handleCommand(ZenoCmd* zeno_cmd)
                 break;
             }
         }
-        QString debug_msg = QString::fromLatin1(reinterpret_cast<const char*>(zeno_debug->debug_msg), debug_msg_len);
-        qDebug() << "ZenoDBG: " << debug_msg;
-        break;
-    }
-    case ZENO_CMD_FLASH_READ_ROW_FROM_BUFFER: {
-        ZenoFlashReadFromBufferResponse* zeno_read_flash_response = reinterpret_cast<ZenoFlashReadFromBufferResponse*>(zeno_cmd);
-
-        QMutexLocker lock(&read_flash_buffer_mutex);
-        read_flash_buffer_response = *zeno_read_flash_response;
-        read_reply_received = 1;
-        read_flash_buffer_cond.wakeOne();
+        std::string debug_msg(reinterpret_cast<const char*>(zeno_debug->debug_msg), debug_msg_len);
+        zDebug("ZenoDBG: %s", debug_msg.c_str());
         break;
     }
     default:
@@ -930,40 +740,42 @@ void VxZenoUSBDevice::handleCommand(ZenoCmd* zeno_cmd)
     }
 }
 
-void VxZenoUSBDevice::startClockInt()
+void ZZenoUSBDevice::startClockInt()
 {
     ZenoCmd cmd;
     ZenoResponse reply;
     memset(&cmd, 0, sizeof(cmd));
     cmd.h.cmd_id = ZEMO_CMD_START_CLOCK_INT;
 
-    qDebug() << "Sending Start-Clock INT cmd";
+    zDebug("Sending Start-Clock INT cmd");
     if  ( !sendAndWhaitReply(&cmd, &reply) ) {
-        qCritical() << "ERROR(ZenoUSB): failed to start clock INT" << last_error_text;
+        zCritical("(ZenoUSB): failed to start clock INT: %s", last_error_text.c_str());
         return;
     }
-    t2_clock_start_ref_in_us = VxTimerBase::getCurrentTimeInUs();
+
+    auto t_now = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch();
+    t2_clock_start_ref_in_us = t_now.count();
     init_calibrate_count = 5;
     drift_time_in_us = 0;
 }
 
-void VxZenoUSBDevice::stopClockInt()
+void ZZenoUSBDevice::stopClockInt()
 {
     ZenoCmd cmd;
     ZenoResponse reply;
     memset(&cmd, 0, sizeof(cmd));
     cmd.h.cmd_id = ZEMO_CMD_STOP_CLOCK_INT;
 
-    qDebug() << "Sending Stop-Clock INT cmd";
+    zDebug("Sending Stop-Clock INT cmd");
     if  ( !sendAndWhaitReply(&cmd, &reply) ) {
-        qCritical() << "ERROR(ZenoUSB): failed to stop clock INT" << last_error_text;
+        zCritical("(ZenoUSB): failed to stop clock INT: %s", last_error_text.c_str());
         return;
     }
 }
 
-void VxZenoUSBDevice::__inBulkTransferCallback(libusb_transfer* in_bulk_transfer)
+void ZZenoUSBDevice::__inBulkTransferCallback(libusb_transfer* in_bulk_transfer)
 {
-    VxZenoUSBDevice* _this = static_cast<VxZenoUSBDevice*>(in_bulk_transfer->user_data);
+    ZZenoUSBDevice* _this = static_cast<ZZenoUSBDevice*>(in_bulk_transfer->user_data);
 
     // qDebug() << " bulk complete status: " << in_bulk_transfer->status << " transferrred: " << in_bulk_transfer->actual_length;
 
@@ -976,13 +788,13 @@ void VxZenoUSBDevice::__inBulkTransferCallback(libusb_transfer* in_bulk_transfer
     if ( in_bulk_transfer->status != LIBUSB_TRANSFER_TIMED_OUT &&
          in_bulk_transfer->status != LIBUSB_TRANSFER_CANCELLED &&
          in_bulk_transfer->status != LIBUSB_TRANSFER_COMPLETED ) {
-        qCritical() << "ERROR(ZenoUSB) unexcepted bulk transfer status: " << in_bulk_transfer->status;
+        zError("(ZenoUSB) unexcepted bulk transfer status: %d", in_bulk_transfer->status);
         _this->in_bulk_transfer_complete = 1;
         return;
     }
 
     if ( in_bulk_transfer->status == LIBUSB_TRANSFER_CANCELLED) {
-        qDebug() << " --- in bulk transfer was canceled";
+        zDebug(" --- in bulk transfer was canceled");
     }
 
     if ( in_bulk_transfer->status == LIBUSB_TRANSFER_COMPLETED) {
@@ -991,19 +803,19 @@ void VxZenoUSBDevice::__inBulkTransferCallback(libusb_transfer* in_bulk_transfer
 
     /* Re-submit bulk transfer */
     int res;
-    Q_ASSERT(_this->in_bulk_transfer_complete == 0);
+    assert(_this->in_bulk_transfer_complete == 0);
     res = libusb_submit_transfer(_this->in_bulk_transfer);
     if ( res ) {
-        _this->last_error_text = VxUSBContext::translateLibUSBErrorCode(res);
+        _this->last_error_text = ZUSBContext::translateLibUSBErrorCode(res);
         _this->device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-        qDebug() << "ERROR(ZenoUSB) failed to submit bulk transfer: " << _this->last_error_text;
+        zError("(ZenoUSB) failed to submit bulk transfer: %s", _this->last_error_text.c_str());
         _this->in_bulk_transfer_complete = 1;
     }
 }
 
-void VxZenoUSBDevice::__inInterruptTransferCallback(libusb_transfer *in_interrupt_transfer)
+void ZZenoUSBDevice::__inInterruptTransferCallback(libusb_transfer *in_interrupt_transfer)
 {
-    VxZenoUSBDevice* _this = static_cast<VxZenoUSBDevice*>(in_interrupt_transfer->user_data);
+    ZZenoUSBDevice* _this = static_cast<ZZenoUSBDevice*>(in_interrupt_transfer->user_data);
 
     // qDebug() << __PRETTY_FUNCTION__ << "in" << in_interrupt_transfer->status <<  _this->open_ref_count;
 
@@ -1016,14 +828,14 @@ void VxZenoUSBDevice::__inInterruptTransferCallback(libusb_transfer *in_interrup
     if ( in_interrupt_transfer->status != LIBUSB_TRANSFER_TIMED_OUT &&
          in_interrupt_transfer->status != LIBUSB_TRANSFER_CANCELLED &&
          in_interrupt_transfer->status != LIBUSB_TRANSFER_COMPLETED ) {
-        qCritical() << "ERROR(ZenoUSB) unexcepted interrupt transfer status: " << in_interrupt_transfer->status;
+        zCritical("(ZenoUSB) unexcepted interrupt transfer status: %d", in_interrupt_transfer->status);
         _this->in_interrupt_transfer_complete = 1;
         return;
     }
 
 
     if ( in_interrupt_transfer->status == LIBUSB_TRANSFER_CANCELLED) {
-        qDebug() << " --- in interrupt transfer was canceled";
+        zDebug(" --- in interrupt transfer was canceled");
     }
 
     if ( in_interrupt_transfer->status == LIBUSB_TRANSFER_COMPLETED) {
@@ -1033,24 +845,24 @@ void VxZenoUSBDevice::__inInterruptTransferCallback(libusb_transfer *in_interrup
 
     /* Re-submit bulk transfer */
     int res;
-    Q_ASSERT(_this->in_interrupt_transfer_complete == 0);
+    assert(_this->in_interrupt_transfer_complete == 0);
     res = libusb_submit_transfer(_this->in_interrupt_transfer);
     if ( res ) {
-        _this->last_error_text = VxUSBContext::translateLibUSBErrorCode(res);
+        _this->last_error_text = ZUSBContext::translateLibUSBErrorCode(res);
         _this->device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-        qDebug() << "ERROR(ZenoUSB) failed to submit bulk transfer: " << _this->last_error_text;
+        zError("(ZenoUSB) failed to submit bulk transfer: %s", _this->last_error_text.c_str());
         _this->in_interrupt_transfer_complete = 1;
     }
 }
 
-void VxZenoUSBDevice::__outBulkTransferCallback(libusb_transfer* out_bulk_transfer)
+void ZZenoUSBDevice::__outBulkTransferCallback(libusb_transfer* out_bulk_transfer)
 {
-    VxZenoUSBDevice* _this = static_cast<VxZenoUSBDevice*>(out_bulk_transfer->user_data);
-    QMutexLocker lock(&_this->out_transfer_mutex);
+    ZZenoUSBDevice* _this = static_cast<ZZenoUSBDevice*>(out_bulk_transfer->user_data);
+    std::lock_guard<std::mutex> lock(_this->out_transfer_mutex);
 
     // qDebug() << " TX bulk complete status: " << out_bulk_transfer->status << " transferrred: " << out_bulk_transfer->actual_length;
     _this->bulk_out_transfer_completed = 1;
-    _this->out_transfer_cond.wakeOne();
+    _this->out_transfer_cond.notify_one();
 
     if ( _this->open_ref_count == 0) {
         /* Device closed do not re-submit transfer */
@@ -1061,12 +873,12 @@ void VxZenoUSBDevice::__outBulkTransferCallback(libusb_transfer* out_bulk_transf
     if ( out_bulk_transfer->status != LIBUSB_TRANSFER_TIMED_OUT &&
          out_bulk_transfer->status != LIBUSB_TRANSFER_CANCELLED &&
          out_bulk_transfer->status != LIBUSB_TRANSFER_COMPLETED ) {
-        qCritical() << "ERROR(ZenoUSB) unexcepted transfer status: " << out_bulk_transfer->status;
+        zCritical("(ZenoUSB) unexcepted transfer status: %d", out_bulk_transfer->status);
         _this->next_transfer_index = -1;
         return;
     }
 
-    Q_ASSERT(_this->next_transfer_index != -1);
+    assert(_this->next_transfer_index != -1);
     int res;
     out_bulk_transfer->length = 0;
 
@@ -1075,7 +887,7 @@ void VxZenoUSBDevice::__outBulkTransferCallback(libusb_transfer* out_bulk_transf
         _this->next_transfer_index = 0;
         next_transfer = _this->out_bulk_transfer[1];
     } else {
-        Q_ASSERT(out_bulk_transfer == _this->out_bulk_transfer[1]);
+        assert(out_bulk_transfer == _this->out_bulk_transfer[1]);
         _this->next_transfer_index = 1;
         next_transfer = _this->out_bulk_transfer[0];
     }
@@ -1083,9 +895,9 @@ void VxZenoUSBDevice::__outBulkTransferCallback(libusb_transfer* out_bulk_transf
     if ( next_transfer->length > 0 ) {
         res = libusb_submit_transfer(next_transfer);
         if ( res ) {
-            _this->last_error_text = VxUSBContext::translateLibUSBErrorCode(res);
+            _this->last_error_text = ZUSBContext::translateLibUSBErrorCode(res);
             _this->device_gone_or_disconnected = (res == LIBUSB_ERROR_NO_DEVICE);
-            qDebug() << "ERROR(ZenoUSB) failed to submit bulk transfer: " << _this->last_error_text;
+            zError("(ZenoUSB) failed to submit bulk transfer: %s", _this->last_error_text.c_str());
             _this->next_transfer_index = -1;
         }
         // _this->next_transfer_index = (_this->next_transfer_index + 1) % 2;

@@ -37,54 +37,54 @@
 #include "zzenousbdevice.h"
 #include "libusb.h"
 
-#include <QHash>
+#include <map>
+#include <list>
+#include <mutex>
 
 #define ZURAGON_VENDOR_ID         0x84d8
 #define ZENO_CANUNO_PRODUCT_ID    0x14
 #define ZENO_CANQUATRO_PRODUCT_ID 0x15
 
-class VxUSBContext;
-class VxZenoLINDriver;
-class VxZenoCANDriver : public VxCANDriver {
-    Q_OBJECT
-    Q_PLUGIN_METADATA(IID "com.zuragon.can.driver.usb.Zeno")
+class ZUSBContext;
+class ZZenoLINDriver;
+class ZZenoCANDriver : public ZCANDriver {
 public:
-    VxZenoCANDriver();
-    ~VxZenoCANDriver() override;
+    ZZenoCANDriver();
+    ~ZZenoCANDriver() override;
 
-    const QString getObjectText() const override;
+    const std::string getObjectText() const override;
     int getNumberOfChannels() override;
-    const QString getChannelName(int channel_index) override;
-    VxCANChannel* getChannel(int channel_index) override;
+    const std::string getChannelName(int channel_index) override;
+    ZCANChannel* getChannel(int channel_index) override;
     bool enumerateDevices() override;
 
     void driverRef() override;
     void driverUnref() override;
 
-    VxUSBContext* getUSBContext() const {
+    ZUSBContext* getUSBContext() const {
         return usb_context;
     }
 
-    VxZenoLINDriver* getZenoLINDriver() const {
+    ZZenoLINDriver* getZenoLINDriver() const {
         return lin_driver;
     }
 
-    QList<VxReference<VxZenoUSBDevice> > getZenoDeviceList() const;
+    std::list<ZRef<ZZenoUSBDevice> > getZenoDeviceList() const;
 
 private:
     void init();
     bool enumerateDevicesUnlocked();
 
-    VxUSBContext* usb_context;
-    QHash<int,QString> product_id_table;
-    QList<VxReference<VxZenoUSBDevice> > device_list;
+    ZUSBContext* usb_context;
+    std::map<int,std::string> product_id_table;
+    std::list<ZRef<ZZenoUSBDevice> > device_list;
 
     bool enumerate_pending;
     int driver_ref_count;
-    mutable QMutex driver_mutex;
+    mutable std::mutex driver_mutex;
 
     /* Zeno LIN */
-    VxZenoLINDriver* lin_driver;
+    ZZenoLINDriver* lin_driver;
 };
 
-#endif /* VXZENOCANDRIVER_H_ */
+#endif /* ZZENOCANDRIVER_H_ */

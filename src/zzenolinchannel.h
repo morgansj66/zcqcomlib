@@ -37,25 +37,24 @@
 #include "zenocan.h"
 #include "zring.h"
 
-#include <QWaitCondition>
-#include <QMutex>
+#include <condition_variable>
+#include <mutex>
 
-class VxZenoUSBDevice;
-class VxZenoLINChannel : public VxLINChannel {
-    Q_OBJECT
+class ZZenoUSBDevice;
+class ZZenoLINChannel : public ZLINChannel {
 public:
-    VxZenoLINChannel(int _channel_index, int _display_index, VxZenoUSBDevice* _usb_can_device);
-    ~VxZenoLINChannel() override;
+    ZZenoLINChannel(int _channel_index, int _display_index, ZZenoUSBDevice* _usb_can_device);
+    ~ZZenoLINChannel() override;
 
-    const QString getObjectText() const override;
+    const std::string getObjectText() const;
 
-    const QString getLastErrorText() override;
+    const std::string getLastErrorText() override;
 
     bool open(bool master) override;
 
     bool close() override;
 
-    quint32 getCapabilites() override;
+    uint32_t getCapabilites() override;
 
     bool busOn() override;
 
@@ -63,32 +62,32 @@ public:
 
     bool setBusParameters(int bitrate) override;
 
-    bool setSlaveResponse(quint8 pid,
-                          const quint8 *data,
-                          quint8 data_length,
-                          quint32 tx_flags) override;
+    bool setSlaveResponse(uint8_t pid,
+                          const uint8_t *data,
+                          uint8_t data_length,
+                          uint32_t tx_flags) override;
 
-    bool clearSlaveResponse(quint8 id) override;
+    bool clearSlaveResponse(uint8_t id) override;
 
     bool clearSlaveResponses(void) override;
 
-    ReadResult readWait(quint8& pid, unsigned char *msg,
-                        quint8& data_length, quint32& flags,
-                        qint64& timestamp_in_us,
+    ReadResult readWait(uint8_t& pid, uint8_t *msg,
+                        uint8_t& data_length, uint32_t& flags,
+                        uint64_t& timestamp_in_us,
                         int timeout_in_ms) override;
     // We should possibly add a pointer to an extened message info struct.
-    SendResult send(quint8 id,
-                    const quint8 *msg,
-                    quint8 data_length,
-                    quint32 flags,
+    SendResult send(uint8_t id,
+                    const uint8_t *msg,
+                    uint8_t data_length,
+                    uint32_t flags,
                     int timeout_in_ms) override;
 
-    SendResult sendMasterRequest(quint8 id, quint32 flags) override;
-    SendResult sendWakeup(quint32 flags) override;
+    SendResult sendMasterRequest(uint8_t id, uint32_t flags) override;
+    SendResult sendWakeup(uint32_t flags) override;
 
-    quint64 getSerialNumber() override;
+    uint64_t getSerialNumber() override;
 
-    VxLINDriver* getLINDriver() const override;
+    ZLINDriver* getLINDriver() const override;
 
     void queueMessage(ZenoLINMessage& message);
     void txAck(ZenoTxLINRequestAck& tx_ack);
@@ -100,26 +99,25 @@ private:
 
     int channel_index;
     int display_index;
-    QAtomicInt is_open;
+    std::atomic<int> is_open;
     bool is_master;
     bool auto_baud_set;
-    VxZenoUSBDevice* zeno_usb_device;
+    ZZenoUSBDevice* zeno_usb_device;
 
-    QString last_error_text;
-    QString usb_display_name;
-    quint64 serial_number;
+    std::string last_error_text;
+    std::string usb_display_name;
+    uint64_t serial_number;
 
     /* RX logic */
-    QMutex rx_message_fifo_mutex;
-    QWaitCondition rx_message_fifo_cond;
-    VxRing<ZenoLINMessage> rx_message_fifo;
+    std::mutex rx_message_fifo_mutex;
+    std::condition_variable rx_message_fifo_cond;
+    ZRing<ZenoLINMessage> rx_message_fifo;
 
     /* TX logic */
-    QMutex tx_message_mutex;
-    QWaitCondition tx_message_cond;
+    std::mutex tx_message_mutex;
+    std::condition_variable tx_message_cond;
     bool tx_pending;
     ZenoTxLINRequest tx_message;
-
 };
 
-#endif /* VXZENOLINCHANNEL_H */
+#endif /* ZZENOLINCHANNEL_H */

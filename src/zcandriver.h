@@ -32,11 +32,11 @@
 #ifndef ZCANDRIVER_H_
 #define ZCANDRIVER_H_
 
-#include "zglobal.h"
+#include "zrefcountingobjbase.h"
 #include <string>
 
 class ZCANChannel;
-class ZCANDriver {
+class ZCANDriver : public ZRefCountingObjBase {
 protected:
     ZCANDriver(const std::string& _name, const std::string& _description)
     : driver_priority_order(50), name(_name), description(_description)

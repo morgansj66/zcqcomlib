@@ -48,7 +48,7 @@ public:
     void ref()
     {
         sink();
-        ref_count.fetch_add();
+        ref_count++;
     }
 
     void sinkRef()
@@ -63,7 +63,7 @@ public:
 
     void unref()
     {
-        int non_zero = ref_count.fetch_sub();
+        int non_zero = ref_count.fetch_sub(1);
         if ( !non_zero ){
             delete this;
         }
@@ -90,7 +90,10 @@ public:
     }
 
 protected:
-    virtual ~ZRefCountingObjBase();
+    virtual ~ZRefCountingObjBase()
+    {
+        /* no op */
+    }
 
 private:
     std::atomic<int> ref_count;

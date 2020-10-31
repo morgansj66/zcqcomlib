@@ -165,7 +165,7 @@ void ZZenoUSBDevice::retrieveDeviceInfo()
     zDebug("Zeno Capabilities: %x", info_response->capabilities);
     zDebug("       fw_version: %x", info_response->fw_version);
     zDebug("        serial-nr: %x", info_response->serial_number);
-    zDebug("          clock @: %f", (float(info_response->clock_resolution) / 1000.0f) << "Mhz");
+    zDebug("          clock @: %fMhz", (float(info_response->clock_resolution) / 1000.0f));
     zDebug("CAN channel count: %d", info_response->can_channel_count);
     zDebug("LIN channel count: %d", info_response->lin_channel_count);
 
@@ -586,10 +586,6 @@ void ZZenoUSBDevice::handleIncomingData(int bytes_transferred)
             }
         }
     }
-
-    auto t_now = std::chrono::steady_clock::now().time_since_epoch();
-
-    // qDebug() << "URB done";
 }
 
 void ZZenoUSBDevice::handleInterruptData()

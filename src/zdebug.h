@@ -39,17 +39,18 @@
 extern "C" {
 #endif /* __cplusplus */
 
-#define zDebug(...) f__zDebug(__FILE__,ZFUNC_INFO,__LINE__,__VA_ARGS__)
-void f__zDebug(const char* file, const char* func, int line, const char* format, ...) ZATTR_FORMAT_PRINTF(4,5);
+#define __ZLSTR(x) #x
+#define zDebug(...) f__zDebug(__FILE__,ZFUNC_INFO,__ZLSTR(__LINE__),__VA_ARGS__)
+void f__zDebug(const char* file, const char* func, const char* line, const char* format, ...);//  ZATTR_FORMAT_PRINTF(4,5);
 
-#define zInfo(...) f__zInfo(__FILE__,ZFUNC_INFO,__LINE__,__VA_ARGS__)
-void f__zInfo(const char* file, const char* func, int line, const char* format, ...) ZATTR_FORMAT_PRINTF(4,5);
+#define zInfo(...) f__zInfo(__FILE__,ZFUNC_INFO,__ZLSTR(__LINE__),__VA_ARGS__)
+void f__zInfo(const char* file, const char* func, const char* line, const char* format, ...) ZATTR_FORMAT_PRINTF(4,5);
 
-#define zError(...) f__zInfo(__FILE__,ZFUNC_INFO,__LINE__,__VA_ARGS__)
-void f__zError(const char* file, const char* func, int line, const char* format, ...) ZATTR_FORMAT_PRINTF(4,5);
+#define zError(...) f__zError(__FILE__,ZFUNC_INFO,__ZLSTR(__LINE__),__VA_ARGS__)
+void f__zError(const char* file, const char* func, const char* line, const char* format, ...) ZATTR_FORMAT_PRINTF(4,5);
 
-#define zCritical(...) f__zInfo(__FILE__,ZFUNC_INFO,__LINE__,__VA_ARGS__)
-void f__zCritical(const char* file, const char* func, int line, const char* format, ...) ZATTR_FORMAT_PRINTF(4,5);
+#define zCritical(...) f__zCritical(__FILE__,ZFUNC_INFO,__ZLSTR(__LINE__),__VA_ARGS__)
+void f__zCritical(const char* file, const char* func, const char* line, const char* format, ...) ZATTR_FORMAT_PRINTF(4,5);
 
 #ifdef __cplusplus
 };

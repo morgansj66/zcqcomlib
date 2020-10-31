@@ -1,34 +1,45 @@
-/******
- ***
- **
- **  8P d8P
- **  P d8P  8888 8888 888,8,  ,"Y88b  e88 888  e88 88e  888 8e
- **   d8P d 8888 8888 888 "  "8" 888 d888 888 d888 888b 888 88b
- **  d8P d8 Y888 888P 888    ,ee 888 Y888 888 Y888 888P 888 888
- ** d8P d88  "88 88"  888    "88 888  "88 888  "88 88"  888 888
- **                                    ,  88P
- **                                   "8",P"
- **
- ** Copyright Zuragon Ltd (R)
- **
- ** This Software Development Kit (SDK) is Subject to the payment of the
- ** applicable license fees and have been granted to you on a non-exclusive,
- ** non-transferable basis to use according to Zuragon General Terms 2014.
- ** Zuragon Technologies Ltd reserves any and all rights not expressly
- ** granted to you.
- **
- ***
- *****/
+/*
+ *             Copyright 2020 by Morgan
+ *
+ * This software BSD-new. See the included COPYING file for details.
+ *
+ * License: BSD-new
+ * ==============================================================================
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the \<organization\> nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
 
-#include "vxzenolinchannel.h"
-#include "vxzenousbdevice.h"
-#include "vxzenolindriver.h"
+#include "zzenolinchannel.h"
+#include "zzenousbdevice.h"
+#include "zzenolindriver.h"
 #include "zenocan.h"
+#include "zdebug.h"
+#include <string.h>
+#include <algorithm>
 
-#include <QThread>
-#include <QtDebug>
 /*** ---------------------------==*+*+*==---------------------------------- ***/
-quint8 linCalculatePIDParity(quint8 pid)
+uint8_t linCalculatePIDParity(uint8_t pid)
 {
     /* Check PID parity */
     union {
@@ -58,9 +69,9 @@ quint8 linCalculatePIDParity(quint8 pid)
     return PID.raw_PID;
 }
 
-quint8 linCalculateClassicCRC(quint8* data, quint8 dlc)
+uint8_t linCalculateClassicCRC(uint8_t* data, uint8_t dlc)
 {
-    quint16 __crc = 0;
+    uint16_t __crc = 0;
 
     for (int i = 0; i < dlc; i++){
         __crc = __crc + data[i];
@@ -72,9 +83,9 @@ quint8 linCalculateClassicCRC(quint8* data, quint8 dlc)
     return __crc & 0xff;
 }
 
-quint8 linCalculateEnhancedCRC(quint8 pid, quint8* data, quint8 dlc)
+uint8_t linCalculateEnhancedCRC(uint8_t pid, uint8_t* data, uint8_t dlc)
 {
-    quint16 __crc = pid;
+    uint16_t __crc = pid;
 
     for (int i = 0; i < dlc; i++){
         __crc = __crc + data[i];
@@ -87,8 +98,8 @@ quint8 linCalculateEnhancedCRC(quint8 pid, quint8* data, quint8 dlc)
 }
 
 /*** ---------------------------==*+*+*==---------------------------------- ***/
-VxZenoLINChannel::VxZenoLINChannel(int _channel_index, int _display_index,
-                                   VxZenoUSBDevice *_usb_can_device)
+ZZenoLINChannel::ZZenoLINChannel(int _channel_index, int _display_index,
+                                 ZZenoUSBDevice *_usb_can_device)
     : channel_index(_channel_index),
       display_index(_display_index),
       is_master(false),
@@ -99,40 +110,43 @@ VxZenoLINChannel::VxZenoLINChannel(int _channel_index, int _display_index,
       rx_message_fifo(32),
       tx_pending(false)
 {
-    connect(zeno_usb_device, &VxZenoUSBDevice::destroyed, [this]() {
-        zeno_usb_device = nullptr;
-    });
+    // connect(zeno_usb_device, &ZZenoUSBDevice::destroyed, [this]() {
+    //     zeno_usb_device = nullptr;
+    // });
 }
 
-VxZenoLINChannel::~VxZenoLINChannel()
+ZZenoLINChannel::~ZZenoLINChannel()
 {
     if (is_open) close();
 }
 
-const QString VxZenoLINChannel::getObjectText() const
+const std::string ZZenoLINChannel::getObjectText() const
 {
-    QString channel_name;
-    channel_name = QString("%1 LIN%2 (%3)").arg(usb_display_name).arg(display_index).arg(serial_number);
+    std::string channel_name = usb_display_name + ' ';
+
+    channel_name += "LIN" + std::to_string(display_index) + ' ';
+    channel_name += '(' + std::to_string(serial_number) + ')';
+
     return channel_name;
 }
 
-const QString VxZenoLINChannel::getLastErrorText()
+const std::string ZZenoLINChannel::getLastErrorText()
 {
     return last_error_text;
 }
 
-bool VxZenoLINChannel::open(bool master)
+bool ZZenoLINChannel::open(bool master)
 {
-    is_open.ref();
+    is_open++;
 
     if (is_open.load() > 1) {
-        is_open.deref();
-        last_error_text = QString("LIN Channel %1 is already open").arg(channel_index);
+        is_open--;
+        last_error_text = "LIN Channel " + std::to_string(channel_index+1) + " is already open";
         return false;
     }
 
     if (!zeno_usb_device->open()) {
-        is_open.deref();
+        is_open--;
         return false;
     }
 
@@ -141,13 +155,13 @@ bool VxZenoLINChannel::open(bool master)
 
     memset(&cmd,0,sizeof(ZenoLinOpen));
     cmd.h.cmd_id = ZENO_CMD_LIN_OPEN;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
     cmd.is_master = master;
-    cmd.base_clock_divisor = quint8(zeno_usb_device->getClockResolution() / 1000);
+    cmd.base_clock_divisor = uint8_t(zeno_usb_device->getClockResolution() / 1000);
 
     if (!zeno_usb_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = zeno_usb_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) Ch" << channel_index << " failed to open Zeno LIN channel: " << last_error_text;
+        zCritical("(ZenoUSB) LIN%d failed to open Zeno LIN channel: %s", display_index, last_error_text.c_str());
         close();
         return false;
     }
@@ -158,7 +172,7 @@ bool VxZenoLINChannel::open(bool master)
     return true;
 }
 
-bool VxZenoLINChannel::close()
+bool ZZenoLINChannel::close()
 {
     busOff();
 
@@ -167,25 +181,25 @@ bool VxZenoLINChannel::close()
 
     memset(&cmd,0,sizeof(ZenoClose));
     cmd.h.cmd_id = ZENO_CMD_LIN_CLOSE;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
 
     if (!zeno_usb_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = zeno_usb_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) Ch" << channel_index << " failed to close Zeno LIN channel: " << last_error_text;
+        zCritical("(ZenoUSB) LIN%d failed to close Zeno LIN channel: %s", display_index, last_error_text.c_str());
     }
 
     is_master = false;
     auto_baud_set = false;
 
     zeno_usb_device->close();
-    is_open.deref();
+    is_open--;
 
     return true;
 }
 
-quint32 VxZenoLINChannel::getCapabilites()
+uint32_t ZZenoLINChannel::getCapabilites()
 {
-    quint32 capabilities;
+    uint32_t capabilities;
 
     capabilities =
             BusStatistics |
@@ -196,7 +210,7 @@ quint32 VxZenoLINChannel::getCapabilites()
     return capabilities;
 }
 
-bool VxZenoLINChannel::busOn()
+bool ZZenoLINChannel::busOn()
 {
     if (!checkOpen()) return false;
 
@@ -205,18 +219,18 @@ bool VxZenoLINChannel::busOn()
 
     memset(&cmd,0,sizeof(ZenoBusOn));
     cmd.h.cmd_id = ZENO_CMD_LIN_BUS_ON;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
 
     if (!zeno_usb_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = zeno_usb_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) LIN-Ch" << channel_index << " failed to go bus on: " << last_error_text;
+        zCritical("(ZenoUSB) LIN%d failed to go bus-on: %s", display_index, last_error_text.c_str());
         return false;
     }
 
     return true;
 }
 
-bool VxZenoLINChannel::busOff()
+bool ZZenoLINChannel::busOff()
 {
     if (!checkOpen()) return false;
 
@@ -225,23 +239,23 @@ bool VxZenoLINChannel::busOff()
 
     memset(&cmd,0,sizeof(ZenoBusOff));
     cmd.h.cmd_id = ZENO_CMD_LIN_BUS_OFF;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
 
     if (!zeno_usb_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = zeno_usb_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) LIN-Ch" << channel_index << " failed to go bus off: " << last_error_text;
+        zCritical("(ZenoUSB) LIN%d failed to go bus-off: %s", display_index, last_error_text.c_str());
         return false;
     }
 
     return true;
 }
 
-bool VxZenoLINChannel::setBusParameters(int bitrate)
+bool ZZenoLINChannel::setBusParameters(int bitrate)
 {
     if (!checkOpen()) return false;
 
     if (bitrate == 0 && is_master) {
-        last_error_text = "ERROR: Lin-Ch " + QString::number(channel_index) + " auto-baud is only supported for LIN slaves";
+        last_error_text = "ERROR: LIN" + std::to_string(display_index) + " auto-baud is only supported for LIN slaves";
         return false;
     }
     ZenoLinBitrate cmd;
@@ -249,12 +263,12 @@ bool VxZenoLINChannel::setBusParameters(int bitrate)
 
     memset(&cmd,0,sizeof(ZenoLinBitrate));
     cmd.h.cmd_id = ZEMO_CMD_LIN_SET_BITRATE;
-    cmd.channel = quint8(channel_index);
-    cmd.bitrate = quint16(bitrate);
+    cmd.channel = uint8_t(channel_index);
+    cmd.bitrate = uint16_t(bitrate);
 
     if (!zeno_usb_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = zeno_usb_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) LIN-Ch" << channel_index << " failed to set bitrate " << last_error_text;
+        zCritical("(ZenoUSB) LIN%d failed to set bitrate: %s", display_index, last_error_text.c_str());
         return false;
     }
 
@@ -263,8 +277,8 @@ bool VxZenoLINChannel::setBusParameters(int bitrate)
     return true;
 }
 
-bool VxZenoLINChannel::setSlaveResponse(quint8 pid, const quint8 *data,
-                                        quint8 data_length, quint32 tx_flags)
+bool ZZenoLINChannel::setSlaveResponse(uint8_t pid, const uint8_t *data,
+                                        uint8_t data_length, uint32_t tx_flags)
 {
     if (!checkOpen()) return false;
 
@@ -273,22 +287,22 @@ bool VxZenoLINChannel::setSlaveResponse(quint8 pid, const quint8 *data,
 
     memset(&cmd,0,sizeof(ZenoTxLINRequest));
     cmd.h.cmd_id = ZENO_CMD_LIN_UPDATE_MESSAGE;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
     cmd.pid = pid & 0x3f;
-    cmd.dlc = qMin(data_length, quint8(8));
+    cmd.dlc = std::min(data_length, uint8_t(8));
     memcpy(cmd.data, data, cmd.dlc);
     cmd.flags = tx_flags;
 
     if (!zeno_usb_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = zeno_usb_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) LIN-Ch" << channel_index << " failed to update slave response " << last_error_text;
+        zCritical("(ZenoUSB) LIN%d failed to update slave response: %s", display_index, last_error_text.c_str());
         return false;
     }
 
     return true;
 }
 
-bool VxZenoLINChannel::clearSlaveResponse(quint8 pid)
+bool ZZenoLINChannel::clearSlaveResponse(uint8_t pid)
 {
     if (!checkOpen()) return false;
 
@@ -296,19 +310,19 @@ bool VxZenoLINChannel::clearSlaveResponse(quint8 pid)
     ZenoResponse reply;
 
     cmd.h.cmd_id = ZENO_CMD_LIN_CLEAR_MESSAGE;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
     cmd.pid = pid & 0x3f;
 
     if (!zeno_usb_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = zeno_usb_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) LIN-Ch" << channel_index << " failed to clear slave response " << last_error_text;
+        zCritical("(ZenoUSB) LIN%d failed to update slave response: %s", display_index, last_error_text.c_str());
         return false;
     }
 
     return true;
 }
 
-bool VxZenoLINChannel::clearSlaveResponses()
+bool ZZenoLINChannel::clearSlaveResponses()
 {
     if (!checkOpen()) return false;
 
@@ -316,41 +330,47 @@ bool VxZenoLINChannel::clearSlaveResponses()
     ZenoResponse reply;
 
     cmd.h.cmd_id = ZENO_CMD_LIN_CLEAR_ALL_MESSAGES;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
 
     if (!zeno_usb_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = zeno_usb_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) LIN-Ch" << channel_index << " failed to clear slave responses " << last_error_text;
+        zCritical("(ZenoUSB) LIN%d failed to clear slave response: %s", display_index, last_error_text.c_str());
         return false;
     }
 
     return true;
 }
 
-VxLINChannel::ReadResult VxZenoLINChannel::readWait(quint8 &pid,
-                                                    unsigned char *msg,
-                                                    quint8 &data_length,
-                                                    quint32 &flags,
-                                                    qint64 &timestamp_in_us,
-                                                    int timeout_in_ms)
+bool ZZenoLINChannel::readFromRXFifo(ZenoLINMessage& rx, int timeout_in_ms)
 {
-    rx_message_fifo_mutex.lock();
+    std::unique_lock<std::mutex> lock(rx_message_fifo_mutex);
+
     if ( rx_message_fifo.isEmpty()) {
+        std::chrono::milliseconds timeout(timeout_in_ms);
 
         /* Wait for RX FIFO */
-        rx_message_fifo_cond.wait(&rx_message_fifo_mutex, ulong(timeout_in_ms));
+        rx_message_fifo_cond.wait_for(lock,timeout);
 
         /* If RX FIFO is still empty */
         if ( rx_message_fifo.isEmpty() ) {
-            // onReadTimeoutCheck();
-
             rx_message_fifo_mutex.unlock();
-            return ReadTimeout;
+            return false;
         }
     }
 
-    ZenoLINMessage rx = rx_message_fifo.read();
-    rx_message_fifo_mutex.unlock();
+    rx = rx_message_fifo.read();
+
+    return true;
+}
+
+ZLINChannel::ReadResult ZZenoLINChannel::readWait(uint8_t& pid, uint8_t *msg,
+                                                  uint8_t& data_length,
+                                                  uint32_t& flags,
+                                                  uint64_t& timestamp_in_us,
+                                                  int timeout_in_ms)
+{
+    ZenoLINMessage rx;
+    if (!readFromRXFifo(rx, timeout_in_ms)) return ReadTimeout;
 
     pid = rx.pid & 0x3f;
     flags = rx.flags;
@@ -362,14 +382,14 @@ VxLINChannel::ReadResult VxZenoLINChannel::readWait(quint8 &pid,
     }
 
     // Q_ASSERT(rx.dlc <= 8);
-    data_length = qMin(rx.dlc,quint8(8));
-    timestamp_in_us = qint64(rx.timestamp_end / 70);
+    data_length = std::min(rx.dlc,uint8_t(8));
+    timestamp_in_us = uint64_t(rx.timestamp_end / 70);
     memcpy(msg, rx.data, sizeof(rx.data));
 
     /* Calcuate and check CRC */
     if ( !(rx.flags & ZenoLINNoData) ) {
         /* First check with LIN 2.x enhanced CRC */
-        quint8 __crc = linCalculateEnhancedCRC(rx.pid, rx.data, data_length);
+        uint8_t __crc = linCalculateEnhancedCRC(rx.pid, rx.data, data_length);
         if ( __crc != rx.checksum ) {
             /* Fall over to LIN 1.x classic CRC */
             __crc = linCalculateClassicCRC(rx.data, data_length);
@@ -387,47 +407,46 @@ VxLINChannel::ReadResult VxZenoLINChannel::readWait(quint8 &pid,
     return ReadStatusOK;
 }
 
-VxLINChannel::SendResult VxZenoLINChannel::send(quint8 id,
-                                                const quint8 *msg,
-                                                quint8 data_length,
-                                                quint32 flags,
+ZLINChannel::SendResult ZZenoLINChannel::send(uint8_t id,
+                                                const uint8_t *msg,
+                                                uint8_t data_length,
+                                                uint32_t flags,
                                                 int timeout_in_ms)
 {
     if (!checkOpen()) return SendError;
 
-    tx_message_mutex.lock();
-    if (!waitForTX(timeout_in_ms)) {
-        qDebug() << "LIN send timeout";
-        tx_message_mutex.unlock();
-        return SendTimeout;
-    }
-
     ZenoTxLINRequest cmd;
     ZenoResponse reply;
+    {
+        std::unique_lock<std::mutex> lock(tx_message_mutex);
+        if (!waitForTX(lock,timeout_in_ms)) {
+            zDebug("LIN send timeout");
+            tx_message_mutex.unlock();
+            return SendTimeout;
+        }
 
-    memset(&cmd,0,sizeof(ZenoLinBitrate));
-    cmd.h.cmd_id = ZENO_CMD_LIN_TX_MESSAGE;
-    cmd.channel = quint8(channel_index);
+        memset(&cmd,0,sizeof(ZenoLinBitrate));
+        cmd.h.cmd_id = ZENO_CMD_LIN_TX_MESSAGE;
+        cmd.channel = uint8_t(channel_index);
 
-    cmd.pid = id;
-    cmd.dlc = qMin(data_length, quint8(8));
-    cmd.flags = flags & 0xff;
-    cmd.is_master_request = false;
-    memcpy(cmd.data, msg, cmd.dlc);
+        cmd.pid = id;
+        cmd.dlc = std::min(data_length, uint8_t(8));
+        cmd.flags = flags & 0xff;
+        cmd.is_master_request = false;
+        memcpy(cmd.data, msg, cmd.dlc);
 
-    tx_pending = true;
-    tx_message = cmd;
-    tx_message_mutex.unlock();
-    // cmd.bitrate = quint16(bitrate);
-
+        tx_pending = true;
+        tx_message = cmd;
+    }
+    // cmd.bitrate = uint16_t(bitrate);
 
     if (!zeno_usb_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = zeno_usb_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) LIN-Ch" << channel_index << " failed transmit " << last_error_text;
+        zCritical("(ZenoUSB) LIN%d transmit failed: %s", display_index, last_error_text.c_str());
 
         tx_message_mutex.lock();
         tx_pending = false;
-        tx_message_cond.wakeOne();
+        tx_message_cond.notify_one();
         tx_message_mutex.unlock();
 
         return SendError;
@@ -436,43 +455,42 @@ VxLINChannel::SendResult VxZenoLINChannel::send(quint8 id,
     return SendStatusOK;
 }
 
-VxLINChannel::SendResult VxZenoLINChannel::sendMasterRequest(quint8 pid,
-                                                             quint32 flags)
+ZLINChannel::SendResult ZZenoLINChannel::sendMasterRequest(uint8_t pid,
+                                                             uint32_t flags)
 {
     if (!checkOpen()) return SendError;
 
-    tx_message_mutex.lock();
-    if (!waitForTX(100)) {
-        tx_message_mutex.unlock();
-
-        return SendTimeout;
-    }
-
     ZenoTxLINRequest cmd;
     ZenoResponse reply;
+    {
+        std::unique_lock<std::mutex> lock(tx_message_mutex);
+        if (!waitForTX(lock,100)) {
+            tx_message_mutex.unlock();
 
-    memset(&cmd,0,sizeof(ZenoLinBitrate));
-    cmd.h.cmd_id = ZENO_CMD_LIN_TX_MESSAGE;
-    cmd.channel = quint8(channel_index);
+            return SendTimeout;
+        }
 
-    cmd.pid = pid;
-    cmd.dlc = 0;
-    cmd.flags = flags;
-    cmd.is_master_request = true;
+        memset(&cmd,0,sizeof(ZenoLinBitrate));
+        cmd.h.cmd_id = ZENO_CMD_LIN_TX_MESSAGE;
+        cmd.channel = uint8_t(channel_index);
 
-    tx_pending = true;
-    tx_message = cmd;
-    tx_message_mutex.unlock();
+        cmd.pid = pid;
+        cmd.dlc = 0;
+        cmd.flags = flags;
+        cmd.is_master_request = true;
 
-    qDebug() << "Send master request" << channel_index;
+        tx_pending = true;
+        tx_message = cmd;
+    }
+    zDebug("LIN%d Send master request", display_index);
 
     if (!zeno_usb_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = zeno_usb_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) LIN-Ch" << channel_index << " failed transmit " << last_error_text;
+        zCritical("(ZenoUSB) LIN%d master request failed: %s", display_index, last_error_text.c_str());
 
         tx_message_mutex.lock();
         tx_pending = false;
-        tx_message_cond.wakeOne();
+        tx_message_cond.notify_one();
         tx_message_mutex.unlock();
 
         return SendError;
@@ -481,40 +499,41 @@ VxLINChannel::SendResult VxZenoLINChannel::sendMasterRequest(quint8 pid,
     return SendError;
 }
 
-VxLINChannel::SendResult VxZenoLINChannel::sendWakeup(quint32 flags)
+ZLINChannel::SendResult ZZenoLINChannel::sendWakeup(uint32_t flags)
 {
-    Q_UNUSED(flags)
+    ZUNUSED(flags)
     /* TODO: implement me ... */
 
     return SendError;
 }
 
-quint64 VxZenoLINChannel::getSerialNumber()
+uint64_t ZZenoLINChannel::getSerialNumber()
 {
     return serial_number;
 }
 
-VxLINDriver *VxZenoLINChannel::getLINDriver() const
+ZLINDriver *ZZenoLINChannel::getLINDriver() const
 {
     return zeno_usb_device->getZenoLINDriver();
 }
 
-void VxZenoLINChannel::queueMessage(ZenoLINMessage &message)
+void ZZenoLINChannel::queueMessage(ZenoLINMessage &message)
 {
-    QMutexLocker lock(&rx_message_fifo_mutex);
+    std::lock_guard<std::mutex> lock(rx_message_fifo_mutex);
 
     if ( rx_message_fifo.available() == 0 ) {
-        qDebug() << "ZenoLIN-Ch" << channel_index << "Zeno: RX buffer overflow" << rx_message_fifo.count() << rx_message_fifo.isEmpty();
+        zDebug("(ZenoUSB) LIN%d Zeno: RX buffer overflow: %d - %d", channel_index+1,rx_message_fifo.count(), rx_message_fifo.isEmpty());
         return;
     }
 
-    rx_message_fifo_cond.wakeOne();
+    rx_message_fifo_cond.notify_one();
     rx_message_fifo.write(message);
 }
 
-void VxZenoLINChannel::txAck(ZenoTxLINRequestAck &tx_ack)
+void ZZenoLINChannel::txAck(ZenoTxLINRequestAck &tx_ack)
 {
-    QMutexLocker lock(&tx_message_mutex);
+    std::lock_guard<std::mutex> lock(tx_message_mutex);
+
     if ( tx_pending ) {
         if ( !tx_message.is_master_request ) {
             ZenoLINMessage rx;
@@ -526,10 +545,10 @@ void VxZenoLINChannel::txAck(ZenoTxLINRequestAck &tx_ack)
             memcpy(rx.data, tx_message.data, sizeof(rx.data));
 
             if ( rx.flags | ClassicChecksum ) {
-                rx.checksum = linCalculateClassicCRC(rx.data, qMin(quint8(8), rx.dlc));
+                rx.checksum = linCalculateClassicCRC(rx.data, std::min(uint8_t(8), rx.dlc));
             }
             else {
-                rx.checksum = linCalculateEnhancedCRC(rx.pid, rx.data, qMin(quint8(8), rx.dlc));
+                rx.checksum = linCalculateEnhancedCRC(rx.pid, rx.data, std::min(uint8_t(8), rx.dlc));
             }
 
             rx.timestamp_end = tx_ack.timestamp_end;
@@ -541,30 +560,31 @@ void VxZenoLINChannel::txAck(ZenoTxLINRequestAck &tx_ack)
         }
 
         tx_pending = false;
-        tx_message_cond.wakeOne();
+        tx_message_cond.notify_one();
     }
 }
 
-bool VxZenoLINChannel::checkOpen()
+bool ZZenoLINChannel::checkOpen()
 {
     if (is_open.load() == 0) {
-        last_error_text = QString("LIN Channel %1 is not open").arg(channel_index);
+        last_error_text = "LIN" + std::to_string(display_index) + " channel is not open";
         return false;
     }
 
     return true;
 }
 
-bool VxZenoLINChannel::waitForTX(int timeout_in_ms)
+bool ZZenoLINChannel::waitForTX(std::unique_lock<std::mutex>& lock, int timeout_in_ms)
 {
     if ( tx_pending ) {
-        tx_message_cond.wait(&tx_message_mutex, ulong(timeout_in_ms));
+        std::chrono::milliseconds timeout(timeout_in_ms);
+        tx_message_cond.wait_for(lock, timeout);
     }
 
     return !tx_pending;
 }
 
-bool VxZenoLINChannel::resetAutoBaud()
+bool ZZenoLINChannel::resetAutoBaud()
 {
     if (!checkOpen()) return false;
 
@@ -573,11 +593,12 @@ bool VxZenoLINChannel::resetAutoBaud()
 
     memset(&cmd,0,sizeof(ZenoLinResetAutoBaud));
     cmd.h.cmd_id = ZENO_CMD_LIN_RESET_AUTO_BAUD;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
 
     if (!zeno_usb_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = zeno_usb_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) LIN-Ch" << channel_index << " failed to go bus on: " << last_error_text;
+        zCritical("(ZenoUSB) LIN%d failed to reset auto-baud: %s", display_index, last_error_text.c_str());
+
         return false;
     }
 

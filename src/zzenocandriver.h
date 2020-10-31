@@ -38,7 +38,7 @@
 #include "libusb.h"
 
 #include <map>
-#include <list>
+#include <vector>
 #include <mutex>
 
 #define ZURAGON_VENDOR_ID         0x84d8
@@ -69,7 +69,7 @@ public:
         return lin_driver;
     }
 
-    std::list<ZRef<ZZenoUSBDevice> > getZenoDeviceList() const;
+    std::vector<ZRef<ZZenoUSBDevice> > getZenoDeviceList() const;
 
 private:
     void init();
@@ -77,14 +77,14 @@ private:
 
     ZUSBContext* usb_context;
     std::map<int,std::string> product_id_table;
-    std::list<ZRef<ZZenoUSBDevice> > device_list;
+    std::vector<ZRef<ZZenoUSBDevice> > device_list;
 
     bool enumerate_pending;
     int driver_ref_count;
     mutable std::mutex driver_mutex;
 
     /* Zeno LIN */
-    ZZenoLINDriver* lin_driver;
+    ZRef<ZZenoLINDriver> lin_driver;
 };
 
 #endif /* ZZENOCANDRIVER_H_ */

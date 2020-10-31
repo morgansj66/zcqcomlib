@@ -1,76 +1,87 @@
-/******
- ***
- **
- **  8P d8P
- **  P d8P  8888 8888 888,8,  ,"Y88b  e88 888  e88 88e  888 8e
- **   d8P d 8888 8888 888 "  "8" 888 d888 888 d888 888b 888 88b
- **  d8P d8 Y888 888P 888    ,ee 888 Y888 888 Y888 888P 888 888
- ** d8P d88  "88 88"  888    "88 888  "88 888  "88 88"  888 888
- **                                    ,  88P
- **                                   "8",P"
- **
- ** Copyright Zuragon Ltd (R)
- **
- ** This Software Development Kit (SDK) is Subject to the payment of the
- ** applicable license fees and have been granted to you on a non-exclusive,
- ** non-transferable basis to use according to Zuragon General Terms 2014.
- ** Zuragon Technologies Ltd reserves any and all rights not expressly
- ** granted to you.
- **
- ***
- *****/
+/*
+ *             Copyright 2020 by Morgan
+ *
+ * This software BSD-new. See the included COPYING file for details.
+ *
+ * License: BSD-new
+ * ==============================================================================
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the \<organization\> nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
 
-#include "vxzenolindriver.h"
-#include "vxzenocandriver.h"
-#include "lin/vxlindriverfactory.h"
+#include "zzenolindriver.h"
+#include "zzenocandriver.h"
+// #include "zlindriverfactory.h"
 
-VxZenoLINDriver::VxZenoLINDriver(VxZenoCANDriver *_zeno_can_driver)
-: VxLINDriver("zeno-lin-driver","Zuragon Zeno USB LIN driver"),
+ZZenoLINDriver::ZZenoLINDriver(ZZenoCANDriver *_zeno_can_driver)
+: ZLINDriver("zeno-lin-driver","Zuragon Zeno USB LIN driver"),
   zeno_can_driver(_zeno_can_driver)
 {
     setDriverPriorityOrder(1);
-    VxLINDriverFactory::instance()->addPluginInstance(this);
+    // ZLINDriverFactory::instance()->addPluginInstance(this);
 }
 
-const QString VxZenoLINDriver::getObjectText() const
+const std::string ZZenoLINDriver::getObjectText() const
 {
     return "Zeno LIN interface driver";
 }
 
-int VxZenoLINDriver::getNumberOfChannels()
+int ZZenoLINDriver::getNumberOfChannels()
 {
     int channel_count = 0;
-    for ( int i = 0; i < device_list.size(); ++i ) {
-         channel_count += device_list[i]->getLINChannelCount();
+    for ( auto device : device_list ) {
+        channel_count += device->getLINChannelCount();
     }
 
     return channel_count;
 }
 
-const QString VxZenoLINDriver::getChannelName(int channel_index)
+const std::string ZZenoLINDriver::getChannelName(int channel_index)
 {
-    VxLINChannel* lin_channel = getChannel(channel_index);
-    if ( lin_channel == nullptr ) return QString();
+    ZZenoLINChannel* lin_channel = static_cast<ZZenoLINChannel*>(getChannel(channel_index));
+    if ( lin_channel == nullptr ) return std::string();
     return lin_channel->getObjectText();
 }
 
-VxLINChannel* VxZenoLINDriver::getChannel(int channel_index)
+ZLINChannel* ZZenoLINDriver::getChannel(int channel_index)
 {
     int channel_offset = 0;
-    for ( int i = 0; i < device_list.size(); ++i ) {
+    for(auto device : device_list) {
         int index = channel_index - channel_offset;
-        int channel_count = device_list[i]->getLINChannelCount();
+        int channel_count = device->getCANChannelCount();
+
         if ( index >= 0 && index < channel_count) {
-            return device_list[i]->getLINChannel(index).get();
+            return device->getLINChannel(index).cast<ZZenoLINChannel>();
         }
         channel_offset += channel_count;
     }
     return nullptr;
 }
 
-bool VxZenoLINDriver::enumerateDevices()
+bool ZZenoLINDriver::enumerateDevices()
 {
-    QMutexLocker lock(&driver_mutex);
+    std::lock_guard<std::mutex> lock(driver_mutex);
 
     bool device_list_has_changed = ( new_device_list != device_list );
     enumerateLINChannels();
@@ -78,17 +89,17 @@ bool VxZenoLINDriver::enumerateDevices()
     return device_list_has_changed;
 }
 
-void VxZenoLINDriver::driverRef()
+void ZZenoLINDriver::driverRef()
 {
     zeno_can_driver->driverRef();
 }
 
-void VxZenoLINDriver::driverUnref()
+void ZZenoLINDriver::driverUnref()
 {
     zeno_can_driver->driverUnref();
 }
 
-void VxZenoLINDriver::updateDeviceList(QList<VxReference<VxZenoUSBDevice> > _new_device_list)
+void ZZenoLINDriver::updateDeviceList(std::vector<ZRef<ZZenoUSBDevice> > _new_device_list)
 {
     // QMutexLocker lock(&driver_mutex);
     bool dispatch_channel_list_updated = false;
@@ -101,12 +112,12 @@ void VxZenoLINDriver::updateDeviceList(QList<VxReference<VxZenoUSBDevice> > _new
 
     driver_mutex.unlock();
 
-    if (dispatch_channel_list_updated ) {
-        VxLINDriverFactory::instance()->dispatchChannelListUpdated();
-    }
+    // if (dispatch_channel_list_updated ) {
+    //    ZLINDriverFactory::instance()->dispatchChannelListUpdated();
+    // }
 }
 
-void VxZenoLINDriver::enumerateLINChannels()
+void ZZenoLINDriver::enumerateLINChannels()
 {
     device_list = new_device_list;
     new_device_list.clear();

@@ -1,37 +1,44 @@
-/******
- ***
- **
- **  8P d8P
- **  P d8P  8888 8888 888,8,  ,"Y88b  e88 888  e88 88e  888 8e
- **   d8P d 8888 8888 888 "  "8" 888 d888 888 d888 888b 888 88b
- **  d8P d8 Y888 888P 888    ,ee 888 Y888 888 Y888 888P 888 888
- ** d8P d88  "88 88"  888    "88 888  "88 888  "88 88"  888 888
- **                                    ,  88P
- **                                   "8",P"
- **
- ** Copyright Zuragon Ltd (R)
- **
- ** This Software Development Kit (SDK) is Subject to the payment of the
- ** applicable license fees and have been granted to you on a non-exclusive,
- ** non-transferable basis to use according to Zuragon General Terms 2014.
- ** Zuragon Technologies Ltd reserves any and all rights not expressly
- ** granted to you.
- **
- ***
- *****/
+/*
+ *             Copyright 2020 by Morgan
+ *
+ * This software BSD-new. See the included COPYING file for details.
+ *
+ * License: BSD-new
+ * ==============================================================================
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the \<organization\> nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
 
-#include "vxzenocandriver.h"
-#include "vxzenolindriver.h"
-#include "can/vxcandriverfactory.h"
-#include "lin/vxlindriverfactory.h"
-#include "vxusbcontext.h"
+#include "zzenocandriver.h"
+#include "zzenolindriver.h"
+#include "zusbcontext.h"
+#include "zdebug.h"
+#include <map>
 
-#include <QtPlugin>
-#include <QtDebug>
-
-VxZenoCANDriver::VxZenoCANDriver()
-: VxCANDriver("zeno-can-driver", "Zuragon Zeno USB CAN driver"),
-  usb_context(new VxUSBContext(this)),
+ZZenoCANDriver::ZZenoCANDriver()
+: ZCANDriver("zeno-can-driver", "Zuragon Zeno USB CAN driver"),
+  usb_context(new ZUSBContext()),
   enumerate_pending(false), driver_ref_count(0),
   lin_driver(nullptr)
 {
@@ -39,48 +46,47 @@ VxZenoCANDriver::VxZenoCANDriver()
     init();
 }
 
-VxZenoCANDriver::~VxZenoCANDriver()
+ZZenoCANDriver::~ZZenoCANDriver()
 {
-    if (lin_driver != nullptr) delete lin_driver;
 }
 
-const QString VxZenoCANDriver::getObjectText() const
+const std::string ZZenoCANDriver::getObjectText() const
 {
     return "Zuragon Zeno USB CAN interface driver";
 }
 
-int VxZenoCANDriver::getNumberOfChannels()
+int ZZenoCANDriver::getNumberOfChannels()
 {
     int channel_count = 0;
-    for ( int i = 0; i < device_list.size(); ++i ) {
-         channel_count += device_list[i]->getCANChannelCount();
+    for ( auto device : device_list ) {
+        channel_count += device->getCANChannelCount();
     }
 
     return channel_count;
 }
 
-const QString VxZenoCANDriver::getChannelName(int channel_index)
+const std::string ZZenoCANDriver::getChannelName(int channel_index)
 {
-    VxCANChannel* can_channel = getChannel(channel_index);
-    if ( can_channel == nullptr ) return QString();
+    ZRef<ZZenoCANChannel> can_channel = static_cast<ZZenoCANChannel*>(getChannel(channel_index));
+    if ( can_channel == nullptr ) return std::string();
     return can_channel->getObjectText();
 }
 
-VxCANChannel* VxZenoCANDriver::getChannel(int channel_index)
+ZCANChannel* ZZenoCANDriver::getChannel(int channel_index)
 {
     int channel_offset = 0;
-    for ( int i = 0; i < device_list.size(); ++i ) {
+    for(auto device : device_list) {
         int index = channel_index - channel_offset;
-        int channel_count = device_list[i]->getCANChannelCount();
+        int channel_count = device->getCANChannelCount();
         if ( index >= 0 && index < channel_count) {
-            return device_list[i]->getCANChannel(index).get();
+            return device->getCANChannel(index).get();
         }
         channel_offset += channel_count;
     }
     return nullptr;
 }
 
-bool VxZenoCANDriver::enumerateDevices()
+bool ZZenoCANDriver::enumerateDevices()
 {
     bool channel_list_updated;
 
@@ -91,27 +97,27 @@ bool VxZenoCANDriver::enumerateDevices()
     return channel_list_updated;
 }
 
-bool VxZenoCANDriver::enumerateDevicesUnlocked()
+bool ZZenoCANDriver::enumerateDevicesUnlocked()
 {
     if ( driver_ref_count != 0 ) {
-        qDebug() << __PRETTY_FUNCTION__ << ": can't enumerate CAN devices now, driver is busy";
+        zInfo("can't enumerate CAN devices now, driver is busy");
         enumerate_pending = true;
         return false;
     }
 
-    QList<VxReference<VxZenoUSBDevice> > new_zeno_can_device_list;
-    QList<VxReference<VxZenoUSBDevice> > new_zeno_lin_device_list;
+    std::vector<ZRef<ZZenoUSBDevice> > new_zeno_can_device_list;
+    std::vector<ZRef<ZZenoUSBDevice> > new_zeno_lin_device_list;
 
     /* Discover devices */
     libusb_device **list;
     ssize_t cnt = libusb_get_device_list(usb_context->getUSBContext(), &list);
 
     if (cnt < 0) {
-        qCritical() << "FATAL: failed to enumerate USB devices";
+        zCritical("failed to enumerate USB devices");
         return false;
     }
 
-    int device_index = 0;
+    unsigned int device_index = 0;
     bool device_list_updated = false;
     for (int i = 0; i < cnt; i++) {
         libusb_device *device = list[i];
@@ -120,16 +126,16 @@ bool VxZenoCANDriver::enumerateDevicesUnlocked()
         libusb_get_device_descriptor(device, &descriptor);
         // qDebug() << "Zeno  USB: " << i << " vendor " << descriptor.idVendor << " product " << descriptor.idProduct;
 
-        QHash<int,QString>::iterator k;
+        std::map<int,std::string>::iterator k;
         if (descriptor.idVendor == ZURAGON_VENDOR_ID &&
             (k = product_id_table.find(descriptor.idProduct)) != product_id_table.end()) {
 
-            VxReference<VxZenoUSBDevice> zeno_usb_device;
-            zeno_usb_device = new VxZenoUSBDevice(this,i, device, k.value());
+            ZRef<ZZenoUSBDevice> zeno_usb_device;
+            zeno_usb_device = new ZZenoUSBDevice(this,i, device, k->second);
 
             if ( device_index < device_list.size() ) {
                 /* Check if channel is already at the same index */
-                VxReference<VxZenoUSBDevice> __zeno_usb_device = device_list[device_index];
+                ZRef<ZZenoUSBDevice> __zeno_usb_device = device_list[device_index];
                 if ( !__zeno_usb_device->isDeviceGoneOrDisconnected() &&
                      __zeno_usb_device->getSerialNumber() == zeno_usb_device->getSerialNumber() ) {
                     /* Assume channel already enumerated, don't change */
@@ -143,26 +149,25 @@ bool VxZenoCANDriver::enumerateDevicesUnlocked()
                 device_list_updated = true;
             }
 
-            new_zeno_can_device_list.append(zeno_usb_device);
+            new_zeno_can_device_list.push_back(zeno_usb_device);
             if (zeno_usb_device->getLINChannelCount() > 0 ) {
-                new_zeno_lin_device_list.append(zeno_usb_device);
+                new_zeno_lin_device_list.push_back(zeno_usb_device);
             }
             device_index ++;
         }
     }
 
-    if ( !new_zeno_can_device_list.isEmpty() ) {
+    if ( !new_zeno_can_device_list.empty() ) {
         if ( lin_driver == nullptr ) {
-            lin_driver = new VxZenoLINDriver(this);
+            lin_driver = new ZZenoLINDriver(this);
         }
         lin_driver->updateDeviceList(new_zeno_can_device_list);
     }
     else {
         if ( lin_driver != nullptr ) {
-            delete lin_driver;
             lin_driver = nullptr;
 
-            VxLINDriverFactory::instance()->dispatchChannelListUpdated();
+            // VxLINDriverFactory::instance()->dispatchChannelListUpdated();
         }
     }
 
@@ -172,23 +177,24 @@ bool VxZenoCANDriver::enumerateDevicesUnlocked()
     }
 
     device_list = new_zeno_can_device_list;
+    device_list.shrink_to_fit();
     libusb_free_device_list(list,1);
 
     return device_list_updated;
 }
 
-void VxZenoCANDriver::driverRef()
+void ZZenoCANDriver::driverRef()
 {
-    QMutexLocker lock(&driver_mutex);
+    std::lock_guard<std::mutex> lock(driver_mutex);
     driver_ref_count++;
 }
 
-void VxZenoCANDriver::driverUnref()
+void ZZenoCANDriver::driverUnref()
 {
     bool channel_list_updated = false;
 
     driver_mutex.lock();
-    Q_ASSERT(driver_ref_count >= 0);
+    assert(driver_ref_count >= 0);
 
     driver_ref_count--;
 
@@ -200,18 +206,18 @@ void VxZenoCANDriver::driverUnref()
     }
     driver_mutex.unlock();
 
-    if ( channel_list_updated ) VxCANDriverFactory::instance()->dispatchChannelListUpdated();
+    // if ( channel_list_updated ) VxCANDriverFactory::instance()->dispatchChannelListUpdated();
 }
 
-QList<VxReference<VxZenoUSBDevice> > VxZenoCANDriver::getZenoDeviceList() const
+std::vector<ZRef<ZZenoUSBDevice> > ZZenoCANDriver::getZenoDeviceList() const
 {
     return device_list;
 }
 
-void VxZenoCANDriver::init()
+void ZZenoCANDriver::init()
 {
-    product_id_table.insert(ZENO_CANUNO_PRODUCT_ID, "Zeno CANuno");
-    product_id_table.insert(ZENO_CANQUATRO_PRODUCT_ID,"Zeno CANquatro");
+    product_id_table[ZENO_CANUNO_PRODUCT_ID]    = "Zeno CANuno";
+    product_id_table[ZENO_CANQUATRO_PRODUCT_ID] = "Zeno CANquatro";
 
     enumerateDevices();
 }

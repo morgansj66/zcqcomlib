@@ -1,46 +1,55 @@
-/******
- ***
- **
- **  8P d8P
- **  P d8P  8888 8888 888,8,  ,"Y88b  e88 888  e88 88e  888 8e
- **   d8P d 8888 8888 888 "  "8" 888 d888 888 d888 888b 888 88b
- **  d8P d8 Y888 888P 888    ,ee 888 Y888 888 Y888 888P 888 888
- ** d8P d88  "88 88"  888    "88 888  "88 888  "88 88"  888 888
- **                                    ,  88P
- **                                   "8",P"
- **
- ** Copyright Zuragon Ltd (R)
- **
- ** This Software Development Kit (SDK) is Subject to the payment of the
- ** applicable license fees and have been granted to you on a non-exclusive,
- ** non-transferable basis to use according to Zuragon General Terms 2014.
- ** Zuragon Technologies Ltd reserves any and all rights not expressly
- ** granted to you.
- **
- ***
- *****/
+/*
+ *             Copyright 2020 by Morgan
+ *
+ * This software BSD-new. See the included COPYING file for details.
+ *
+ * License: BSD-new
+ * ==============================================================================
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the \<organization\> nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
 
-#ifndef VXZENOLINDRIVER_H
-#define VXZENOLINDRIVER_H
+#ifndef ZZENOLINDRIVER_H
+#define ZZENOLINDRIVER_H
 
-#include "lin/vxlindriver.h"
-#include "vxzenousbdevice.h"
+#include "zlindriver.h"
+#include "zzenousbdevice.h"
+#include <mutex>
+#include <vector>
 
-#include <QMutex>
-
-class VxZenoCANDriver;
-class VxZenoLINDriver : public VxLINDriver {
-    Q_OBJECT
+class ZZenoCANDriver;
+class ZZenoLINDriver : public ZLINDriver {
 public:
-    VxZenoLINDriver(VxZenoCANDriver* _zeno_can_driver);
+    ZZenoLINDriver(ZZenoCANDriver* _zeno_can_driver);
 
-    const QString getObjectText() const override;
+    const std::string getObjectText() const override;
 
     int getNumberOfChannels() override;
 
-    const QString getChannelName(int channel_index) override;
+    const std::string getChannelName(int channel_index) override;
 
-    VxLINChannel* getChannel(int channel_index) override;
+    ZLINChannel* getChannel(int channel_index) override;
 
     bool enumerateDevices() override;
 
@@ -48,17 +57,16 @@ public:
 
     void driverUnref() override;
 
-    void updateDeviceList(QList<VxReference<VxZenoUSBDevice> > new_device_list);
-
+    void updateDeviceList(std::vector<ZRef<ZZenoUSBDevice> > new_device_list);
 
 private:
     void enumerateLINChannels();
 
-    QList<VxReference<VxZenoUSBDevice> > device_list;
-    QList<VxReference<VxZenoUSBDevice> > new_device_list;
+    std::vector<ZRef<ZZenoUSBDevice> > device_list;
+    std::vector<ZRef<ZZenoUSBDevice> > new_device_list;
 
-    QMutex driver_mutex;
-    VxZenoCANDriver* zeno_can_driver;
+    std::mutex driver_mutex;
+    ZZenoCANDriver* zeno_can_driver;
 };
 
 #endif /* VXZENOLINDRIVER_H */

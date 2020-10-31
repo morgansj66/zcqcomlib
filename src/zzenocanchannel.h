@@ -58,11 +58,11 @@ public:
     bool setBusParametersFd(int bitrate, int sample_point, int sjw) override;
     bool setDriverMode(DriverMode driver_mode) override;
     ReadResult readWait(uint32_t& id, uint8_t *msg,
-                        uint8_t& dlc, uint32_t& flag,
+                        uint8_t& dlc, uint32_t& flags,
                         uint64_t& driver_timestmap_in_us,
                         int timeout_in_ms) override;
     SendResult send(const uint32_t id, const uint8_t *msg,
-                    const uint8_t dlc, const uint32_t flag,
+                    const uint8_t dlc, const uint32_t flags,
                     int timeout_in_ms) override;
     uint64_t getSerialNumber() override;
 
@@ -82,10 +82,10 @@ private:
     void flushRxFifo();
     void flushTxFifo();
     bool checkOpen();
-    bool waitForSpaceInTxFifo(int& timeout_in_ms);
+    bool waitForSpaceInTxFifo(std::unique_lock<std::mutex>& lock, int& timeout_in_ms);
     bool getZenoDeviceTimeInUs(uint64_t& timestamp_in_us);
-    SendResult sendFD(const long id, const unsigned char *msg,
-                      const unsigned int dlc, const unsigned int flags,
+    SendResult sendFD(const uint32_t id, const uint8_t *msg,
+                      const uint8_t dlc, const uint32_t flags,
                       int timeout_in_ms);
 
     int channel_index;
@@ -115,6 +115,7 @@ private:
         uint8_t dlc;
         uint8_t data[64];
     };
+    bool readFromRXFifo(FifoRxCANMessage& rx, int timeout_in_ms);
 
     struct FifoTxCANMessage {
         uint32_t id;

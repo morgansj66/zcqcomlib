@@ -29,13 +29,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
+
 #include "zzenocanchannel.h"
 #include "zzenousbdevice.h"
 #include "zzenocandriver.h"
 #include "zdebug.h"
+#include <string.h>
+#include <algorithm>
 
 ZZenoCANChannel::ZZenoCANChannel(int _channel_index,
-                                   ZZenoUSBDevice* _usb_can_device)
+                                 ZZenoUSBDevice* _usb_can_device)
     : channel_index(_channel_index),
       is_open(false),is_canfd_mode(false),
       initial_timer_adjustment_done(false),
@@ -53,9 +56,9 @@ ZZenoCANChannel::ZZenoCANChannel(int _channel_index,
       serial_number(usb_can_device->getSerialNumber()),
       base_clock_divisor(1)
 {
-    connect(usb_can_device, &VxZenoUSBDevice::destroyed, [this]() {
-        usb_can_device = nullptr;
-    });
+    // connect(usb_can_device, &VxZenoUSBDevice::destroyed, [this]() {
+    //     usb_can_device = nullptr;
+    // });
 
     memset(&canfd_msg_p1, 0 , sizeof(canfd_msg_p1));
     memset(&canfd_msg_p2, 0 , sizeof(canfd_msg_p2));
@@ -68,8 +71,11 @@ ZZenoCANChannel::~ZZenoCANChannel()
 
 const std::string ZZenoCANChannel::getObjectText() const
 {
-    QString channel_name;
-    channel_name = QString("%1 Ch%2 (%3)").arg(usb_display_name).arg(channel_index+1).arg(serial_number);
+    std::string channel_name = usb_display_name + ' ';
+
+    channel_name += "Ch" + std::to_string(channel_index+1) + ' ';
+    channel_name += '(' + std::to_string(serial_number) + ')';
+
     return channel_name;
 }
 
@@ -80,16 +86,16 @@ const std::string ZZenoCANChannel::getLastErrorText()
 
 bool ZZenoCANChannel::open(int open_flags)
 {
-    is_open.ref();
+    is_open++;
 
     if (is_open.load() > 1) {
-        is_open.deref();
-        last_error_text = QString("CAN Channel %1 is already open").arg(channel_index);
+        is_open--;
+        last_error_text = "CAN Channel " + std::to_string(channel_index+1) + " is already open";
         return false;
     }
 
-    if ( open_flags & VxCANFlags::SharedMode ) {
-        last_error_text = QStringLiteral("Shared mode not supported on this CAN channel");
+    if ( open_flags & ZCANFlags::SharedMode ) {
+        last_error_text = "Shared mode not supported on this CAN channel";
         return false;
     }
 
@@ -97,7 +103,7 @@ bool ZZenoCANChannel::open(int open_flags)
     flushTxFifo();
 
     if (!usb_can_device->open()) {
-        is_open.deref();
+        is_open--;
         return false;
     }
 
@@ -107,33 +113,33 @@ bool ZZenoCANChannel::open(int open_flags)
 
     memset(&cmd,0,sizeof(ZenoOpen));
     cmd.h.cmd_id = ZENO_CMD_OPEN;
-    cmd.channel = quint8(channel_index);
-    cmd.base_clock_divisor = quint8(usb_can_device->getClockResolution() / 1000);
+    cmd.channel = uint8_t(channel_index);
+    cmd.base_clock_divisor = uint8_t(usb_can_device->getClockResolution() / 1000);
 
-    if ( open_flags & VxCANFlags::CanFD ) {
+    if ( open_flags & ZCANFlags::CanFD ) {
         cmd.can_fd_mode = 1;
         is_canfd_mode = true;
     }
     else is_canfd_mode = false;
 
-    if ( open_flags & VxCANFlags::CanFDNonISO ) {
+    if ( open_flags & ZCANFlags::CanFDNonISO ) {
         cmd.can_fd_non_iso = 1;
     }
 
     if (!usb_can_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = usb_can_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) Ch" << channel_index << " failed to open Zeno CAN channel: " << last_error_text;
+        zCritical("(ZenoUSB) Ch%d failed to open Zeno CAN channel: %s", channel_index+1, last_error_text.c_str());
         close();
         return false;
     }
 
-    last_device_timestamp_in_us = 0;
+    // last_device_timestamp_in_us = 0;
     max_outstanding_tx_requests = reply.max_pending_tx_msgs;
-    open_start_ref_timestamp_in_us = qint64(reply.clock_start_ref);
+    open_start_ref_timestamp_in_us = uint64_t(reply.clock_start_ref);
     initial_timer_adjustment_done = 0;
-    base_clock_divisor = qMax(uint(reply.base_clock_divisor),1u);
+    base_clock_divisor = std::min(uint(reply.base_clock_divisor),1u);
 
-    qDebug() << "Zeno - max outstanding TX:" << reply.max_pending_tx_msgs << "Base clock divisor:" << base_clock_divisor;
+    zDebug("Zeno - max outstanding TX: %d Base clock divisor: %d", reply.max_pending_tx_msgs, base_clock_divisor);
 
     return true;
 }
@@ -147,31 +153,31 @@ bool ZZenoCANChannel::close()
 
     memset(&cmd,0,sizeof(ZenoClose));
     cmd.h.cmd_id = ZENO_CMD_CLOSE;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
 
     if (!usb_can_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = usb_can_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) Ch" << channel_index << " failed to close Zeno CAN channel: " << last_error_text;
+        zCritical("(ZenoUSB) Ch%d failed to close Zeno CAN channel: %s", channel_index+1, last_error_text.c_str());
     }
 
     is_canfd_mode = false;
     current_bitrate = 0;
     usb_can_device->close();
-    is_open.deref();
+    is_open--;
 
     return true;
 }
 
 uint32_t ZZenoCANChannel::getCapabilites()
 {
-    quint32 capabilities =
-            GenerateError |
-            ErrorCounters |
-            BusStatistics |
-            ErrorCounters |
-            ExtendedCAN   |
-            TxRequest     |
-            TxAcknowledge;
+    uint32_t capabilities =
+             GenerateError |
+             ErrorCounters |
+             BusStatistics |
+             ErrorCounters |
+             ExtendedCAN   |
+             TxRequest     |
+             TxAcknowledge;
 
     if ( channel_index < 4) {
         capabilities |= CanFD | CanFDNonISO;
@@ -182,7 +188,7 @@ uint32_t ZZenoCANChannel::getCapabilites()
 
 bool ZZenoCANChannel::busOn()
 {
-    qDebug() << "ZenoCAN-Ch" << channel_index << "Bus On";
+    zDebug("ZenoCAN Ch%d Bus On", channel_index+1);
     if (!checkOpen()) return false;
 
     ZenoBusOn cmd;
@@ -190,16 +196,17 @@ bool ZZenoCANChannel::busOn()
 
     memset(&cmd,0,sizeof(ZenoBusOn));
     cmd.h.cmd_id = ZENO_CMD_BUS_ON;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
 
     if (!usb_can_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = usb_can_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) Ch" << channel_index << " failed to go bus on: " << last_error_text;
+        zCritical("(ZenoUSB) Ch%d failed to go bus on: %s", channel_index+1, last_error_text.c_str());
         return false;
     }
 
     /* Bus load statistic */
-    last_measure_time_in_us = VxTimerBase::getCurrentTimeInUs();
+    auto t_now = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch();
+    last_measure_time_in_us = t_now.count();
     bus_active_bit_count = 0;
 
     return true;
@@ -207,7 +214,7 @@ bool ZZenoCANChannel::busOn()
 
 bool ZZenoCANChannel::busOff()
 {
-    qDebug() << "ZenoCAN-Ch" << channel_index  << "Bus Off";
+    zDebug("ZenoCAN Ch%d Bus Off", channel_index+1);
     if (!checkOpen()) return false;
 
     ZenoBusOff cmd;
@@ -215,11 +222,11 @@ bool ZZenoCANChannel::busOff()
 
     memset(&cmd,0,sizeof(ZenoBitTiming));
     cmd.h.cmd_id = ZENO_CMD_BUS_OFF;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
 
     if (!usb_can_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = usb_can_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) Ch" << channel_index << " failed to go bus off: " << last_error_text;
+        zCritical("(ZenoUSB) Ch%d failed to go bus off: %s", channel_index+1, last_error_text.c_str());
         return false;
     }
 
@@ -228,8 +235,8 @@ bool ZZenoCANChannel::busOff()
 
 bool ZZenoCANChannel::setBusParameters(int bitrate, int sample_point, int sjw)
 {
-    Q_UNUSED(sample_point)
-    Q_UNUSED(sjw)
+    ZUNUSED(sample_point)
+    ZUNUSED(sjw)
 
     if (!checkOpen()) return false;
 
@@ -238,7 +245,7 @@ bool ZZenoCANChannel::setBusParameters(int bitrate, int sample_point, int sjw)
 
     memset(&cmd,0,sizeof(ZenoBitTiming));
     cmd.h.cmd_id = ZENO_CMD_SET_BIT_TIMING;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
 
     switch (bitrate) {
     case 1000000:
@@ -371,15 +378,15 @@ bool ZZenoCANChannel::setBusParameters(int bitrate, int sample_point, int sjw)
         break;
 
     default:
-        last_error_text =  QString("Unsupported bitrate %1").arg(bitrate);
+        last_error_text = "Unsupported bitrate: " + std::to_string(bitrate);
         return false;
     }
 
-    qDebug()  << "ZenoCAN-Ch" << channel_index  << "Bus params" << cmd.brp << cmd.tseg1 << cmd.tseg2 << cmd.sjw;
+    zDebug("ZenoCAN Ch%d Bus params BRP:%d TSEG1:%d TSEG2:%d SJW:%d", channel_index+1, cmd.brp, cmd.tseg1, cmd.tseg2, cmd.sjw);
 
     if (!usb_can_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = usb_can_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) Ch" << channel_index << " failed set bit timings: " << last_error_text;
+        zCritical("(ZenoUSB) Ch%d failed to set bit timings: %s", channel_index+1, last_error_text.c_str());
         return false;
     }
 
@@ -390,8 +397,8 @@ bool ZZenoCANChannel::setBusParameters(int bitrate, int sample_point, int sjw)
 
 bool ZZenoCANChannel::setBusParametersFd(int bitrate, int sample_point, int sjw)
 {
-    Q_UNUSED(sample_point)
-    Q_UNUSED(sjw)
+    ZUNUSED(sample_point)
+    ZUNUSED(sjw)
 
     if (!checkOpen()) return false;
 
@@ -400,7 +407,7 @@ bool ZZenoCANChannel::setBusParametersFd(int bitrate, int sample_point, int sjw)
 
     memset(&cmd,0,sizeof(ZenoBitTiming));
     cmd.h.cmd_id = ZENO_CMD_SET_DATA_BIT_TIMING;
-    cmd.channel = quint8(channel_index);
+    cmd.channel = uint8_t(channel_index);
 
     switch (bitrate) {
     case 1000000:
@@ -513,53 +520,59 @@ bool ZZenoCANChannel::setBusParametersFd(int bitrate, int sample_point, int sjw)
         cmd.tdc_value = 0;
         break;
     default:
-        last_error_text =  QString("Unsupported data-bitrate %1").arg(bitrate);
+        last_error_text = "Unsupported data-bitrate: " + std::to_string(bitrate);
         return false;
     }
 
-    qDebug()  << "ZenoCAN-Ch" << channel_index  << "Bus params" << cmd.brp << cmd.tseg1 << cmd.tseg2 << cmd.sjw;
+    zDebug("ZenoCAN Ch%d data timing params BRP:%d TSEG1:%d TSEG2:%d SJW:%d", channel_index+1, cmd.brp, cmd.tseg1, cmd.tseg2, cmd.sjw);
 
     if (!usb_can_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = usb_can_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) Ch" << channel_index << " failed set data bit timings: " << last_error_text;
+        zCritical("(ZenoUSB) Ch%d failed to set data bit timings: %s", channel_index+1, last_error_text.c_str());
         return false;
     }
 
     return true;
 }
 
-bool ZZenoCANChannel::setDriverMode(VxCANFlags::DriverMode driver_mode)
+bool ZZenoCANChannel::setDriverMode(ZCANFlags::DriverMode driver_mode)
 {
-    Q_UNUSED(driver_mode)
+    ZUNUSED(driver_mode)
 
     /* TODO: implement me .... */
     return true;
 }
 
-VxCANFlags::ReadResult ZZenoCANChannel::readWait(long& id, unsigned char* msg,
-                                                  unsigned int& dlc,
-                                                  unsigned int& flags,
-                                                  qint64& driver_timestmap_in_us,
-                                                  qint64& appl_timestamp_in_us,
-                                                  int timeout_in_ms)
+bool ZZenoCANChannel::readFromRXFifo(ZZenoCANChannel::FifoRxCANMessage& rx,
+                                     int timeout_in_ms)
 {
-    rx_message_fifo_mutex.lock();
+    std::unique_lock<std::mutex> lock(rx_message_fifo_mutex);
+
     if ( rx_message_fifo.isEmpty()) {
+        std::chrono::milliseconds timeout(timeout_in_ms);
 
         /* Wait for RX FIFO */
-        rx_message_fifo_cond.wait(&rx_message_fifo_mutex, ulong(timeout_in_ms));
+        rx_message_fifo_cond.wait_for(lock,timeout);
 
         /* If RX FIFO is still empty */
         if ( rx_message_fifo.isEmpty() ) {
-            onReadTimeoutCheck();
-
             rx_message_fifo_mutex.unlock();
-            return ReadTimeout;
+            return false;
         }
     }
 
-    FifoRxCANMessage rx = rx_message_fifo.read();
-    rx_message_fifo_mutex.unlock();
+    rx = rx_message_fifo.read();
+    return false;
+}
+
+
+ZCANFlags::ReadResult ZZenoCANChannel::readWait(uint32_t& id, uint8_t *msg,
+                                                uint8_t& dlc, uint32_t& flags,
+                                                uint64_t& driver_timestmap_in_us,
+                                                int timeout_in_ms)
+{
+    FifoRxCANMessage rx;
+    if (!readFromRXFifo(rx, timeout_in_ms)) return ReadTimeout;
 
     flags = 0;
     id = long(rx.id);
@@ -578,12 +591,7 @@ VxCANFlags::ReadResult ZZenoCANChannel::readWait(long& id, unsigned char* msg,
     }
     if (rx.flags & ZenoCANErrorHWOverrun)
         flags |= ErrorHWOverrun;
-    // if (rx.flags & LOG_MESSAGE_FLAG_NERR)
-    //    flag |= NError;
-    //if (rx.flags & LOG_MESSAGE_FLAG_WAKEUP)
-    //    flag |= Wakeup;
-    //if (rx.flags & LOG_MESSAGE_FLAG_REMOTE_FRAME)
-    //    flag |= Rtr;
+
     if (rx.flags & ZenoCANFlagTxAck)
         flags |= TxMsgAcknowledge;
 
@@ -595,43 +603,37 @@ VxCANFlags::ReadResult ZZenoCANChannel::readWait(long& id, unsigned char* msg,
             flags |= CanFDBitrateSwitch;
         //TODO: Check flag CanFDESI
     }
-    // Q_ASSERT(rx.dlc <= 8);
 
-    dlc = qMin(uint(rx.dlc),uint(is_canfd_mode ? 64 : 8));
+    dlc = std::min(uint(rx.dlc),uint(is_canfd_mode ? 64 : 8));
     msg_bit_count += dlc * 8;
     bus_active_bit_count += msg_bit_count;
 
-    driver_timestmap_in_us = qint64(rx.timestamp / base_clock_divisor);
+    driver_timestmap_in_us = uint64_t(rx.timestamp / base_clock_divisor);
 
-    // qint64 device_time;
-    // getDeviceTimeInUs(device_time);
-    // qDebug() << "DS" << driver_timestmap_in_us << device_time << (device_time-driver_timestmap_in_us);
-
-    appl_timestamp_in_us = caluclateTimeStamp(driver_timestmap_in_us);
     memcpy(msg, rx.data, rx.dlc);
 
     return ReadStatusOK;
 }
 
-VxCANFlags::SendResult ZZenoCANChannel::send(const long id,
-                                              const unsigned char* msg,
-                                              const unsigned int dlc,
-                                              const unsigned int flags,
-                                              int timeout_in_ms)
+ZCANFlags::SendResult ZZenoCANChannel::send(const uint32_t id,
+                                            const uint8_t *msg,
+                                            const uint8_t dlc,
+                                            const uint32_t flags,
+                                            int timeout_in_ms)
 {
 
     if (!checkOpen()) return SendError;
-    if (is_canfd_mode && (flags &  VxCANChannel::CanFDFrame))
+    if (is_canfd_mode && (flags &  ZCANChannel::CanFDFrame))
         return sendFD(id,msg,dlc,flags,timeout_in_ms);
     // qDebug() << "ZENO_CMD_CAN20_TX_REQUEST" << hex << id;;
 
     ZenoTxCAN20Request request;
     request.h.cmd_id = ZENO_CMD_CAN20_TX_REQUEST;
-    request.channel = quint8(channel_index);
+    request.channel = uint8_t(channel_index);
     request.h.transaction_id = tx_next_trans_id & 0x7f;
     tx_next_trans_id ++;
 
-    request.id = quint32(id);
+    request.id = uint32_t(id);
     request.dlc = dlc & 0x0F;
     request.flags = 0;
 
@@ -645,20 +647,20 @@ VxCANFlags::SendResult ZZenoCANChannel::send(const long id,
 
     memcpy(request.data, msg, 8);
 
-    tx_message_fifo_mutex.lock();
+    std::unique_lock<std::mutex> tx_lock;
     tx_request_count ++;
     if ( tx_request_count >= int(max_outstanding_tx_requests) ) {
         if (timeout_in_ms > 0) {
-            if ( !waitForSpaceInTxFifo(timeout_in_ms) ) {
+            if ( !waitForSpaceInTxFifo(tx_lock, timeout_in_ms) ) {
                 last_error_text = "Timeout request waiting for space in transmit buffer";
                 tx_request_count --;
-                tx_message_fifo_mutex.unlock();
+
                 return SendTimeout;
             }
         } else {
             last_error_text ="Transmit request buffer overflow";
             tx_request_count --;
-            tx_message_fifo_mutex.unlock();
+
             return TransmitBufferOveflow;
         }
     }
@@ -666,7 +668,6 @@ VxCANFlags::SendResult ZZenoCANChannel::send(const long id,
     if (! usb_can_device->queueTxRequest(zenoRequest(request), timeout_in_ms)) {
         last_error_text = usb_can_device->getLastErrorText();
         tx_request_count --;
-        tx_message_fifo_mutex.unlock();
 
         return SendError;
     }
@@ -675,23 +676,22 @@ VxCANFlags::SendResult ZZenoCANChannel::send(const long id,
     // qDebug() << " enqueue " << request.cmdIOPSeq.transId;
 
     FifoTxCANMessage* tx_request = tx_message_fifo.writePtr();
-    tx_request->id = quint32(id);
+    tx_request->id = uint32_t(id);
     tx_request->flags = request.flags;
     tx_request->transaction_id = request.h.transaction_id;
     tx_request->dlc = request.dlc;
     memcpy(tx_request->data, msg, 8);
 
     tx_message_fifo.write();
-    tx_message_fifo_mutex.unlock();
 
     return SendStatusOK;
 }
 
-VxCANFlags::SendResult ZZenoCANChannel::sendFD(const long id,
-                                                const unsigned char* msg,
-                                                const unsigned int dlc,
-                                                const unsigned int flags,
-                                                int timeout_in_ms)
+ZCANFlags::SendResult ZZenoCANChannel::sendFD(const uint32_t id,
+                                               const uint8_t *msg,
+                                               const uint8_t dlc,
+                                               const uint32_t flags,
+                                               int timeout_in_ms)
 {
     bool dlc_valid = false;
     if ( dlc <= 8 ) {
@@ -719,12 +719,12 @@ VxCANFlags::SendResult ZZenoCANChannel::sendFD(const long id,
 
     ZenoTxCANFDRequestP1 p1_request;
     p1_request.h.cmd_id = ZENO_CMD_CANFD_P1_TX_REQUEST;
-    p1_request.channel = quint8(channel_index);
+    p1_request.channel = uint8_t(channel_index);
     p1_request.h.transaction_id = tx_next_trans_id & 0x7f;
     tx_next_trans_id ++;
 
-    p1_request.id = quint32(id);
-    p1_request.dlc = quint8(dlc);
+    p1_request.id = uint32_t(id);
+    p1_request.dlc = uint8_t(dlc);
     p1_request.flags = 0;
 
     if (flags & Extended) {
@@ -738,22 +738,23 @@ VxCANFlags::SendResult ZZenoCANChannel::sendFD(const long id,
         p1_request.flags |= ZenoCANFlagFDBRS;
     }
 
-    memcpy(p1_request.data, msg, qMin(dlc, uint(20)));
+    memcpy(p1_request.data, msg, std::min(dlc, uint8_t(20)));
 
-    tx_message_fifo_mutex.lock();
+    std::unique_lock<std::mutex> tx_lock(tx_message_fifo_mutex);
+
     tx_request_count ++;
     if ( tx_request_count >= int(max_outstanding_tx_requests) ) {
         if (timeout_in_ms > 0) {
-            if ( !waitForSpaceInTxFifo(timeout_in_ms) ) {
+            if ( !waitForSpaceInTxFifo(tx_lock, timeout_in_ms) ) {
                 last_error_text = "Timeout request waiting for space in transmit buffer";
                 tx_request_count --;
-                tx_message_fifo_mutex.unlock();
+
                 return SendTimeout;
             }
         } else {
             last_error_text ="Transmit request buffer overflow";
             tx_request_count --;
-            tx_message_fifo_mutex.unlock();
+
             return TransmitBufferOveflow;
         }
     }
@@ -761,7 +762,6 @@ VxCANFlags::SendResult ZZenoCANChannel::sendFD(const long id,
     if (! usb_can_device->queueTxRequest(zenoRequest(p1_request), timeout_in_ms)) {
         last_error_text = usb_can_device->getLastErrorText();
         tx_request_count --;
-        tx_message_fifo_mutex.unlock();
 
         return SendError;
     }
@@ -769,16 +769,15 @@ VxCANFlags::SendResult ZZenoCANChannel::sendFD(const long id,
     if ( dlc > 20 ) {
         ZenoTxCANFDRequestP2 p2_request;
         p2_request.h.cmd_id = ZENO_CMD_CANFD_P2_TX_REQUEST;
-        p2_request.channel = quint8(channel_index);
+        p2_request.channel = uint8_t(channel_index);
         p2_request.h.transaction_id = p1_request.h.transaction_id;
         p2_request.dlc = p1_request.dlc;
 
-        memcpy(p2_request.data, msg + 20, qMin(dlc-20, uint(28)));
+        memcpy(p2_request.data, msg + 20, std::min(dlc-20, 28));
 
         if (! usb_can_device->queueTxRequest(zenoRequest(p2_request), timeout_in_ms)) {
             last_error_text = usb_can_device->getLastErrorText();
             tx_request_count --;
-            tx_message_fifo_mutex.unlock();
 
             return SendError;
         }
@@ -786,16 +785,15 @@ VxCANFlags::SendResult ZZenoCANChannel::sendFD(const long id,
         if ( dlc > 48 ) {
             ZenoTxCANFDRequestP3 p3_request;
             p3_request.h.cmd_id = ZENO_CMD_CANFD_P3_TX_REQUEST;
-            p3_request.channel = quint8(channel_index);
+            p3_request.channel = uint8_t(channel_index);
             p3_request.h.transaction_id = p1_request.h.transaction_id;
             p3_request.dlc = p1_request.dlc;
 
-            memcpy(p3_request.data, msg + 48, qMin(dlc-48, uint(16)));
+            memcpy(p3_request.data, msg + 48, std::min(dlc-48, 16));
 
             if (! usb_can_device->queueTxRequest(zenoRequest(p3_request), timeout_in_ms)) {
                 last_error_text = usb_can_device->getLastErrorText();
                 tx_request_count --;
-                tx_message_fifo_mutex.unlock();
 
                 return SendError;
             }
@@ -805,36 +803,23 @@ VxCANFlags::SendResult ZZenoCANChannel::sendFD(const long id,
     // qDebug() << " enqueue" << (tx_next_trans_id & 0x7f) << tx_request_count;
     // qDebug() << " enqueue " << request.cmdIOPSeq.transId;
     // tx_message_fifo.write(request);
+
     FifoTxCANMessage* tx_request = tx_message_fifo.writePtr();
-    tx_request->id = quint32(id);
+    tx_request->id = uint32_t(id);
     tx_request->flags = p1_request.flags;
     tx_request->transaction_id = p1_request.h.transaction_id;
     tx_request->dlc = p1_request.dlc;
-    memcpy(tx_request->data, msg, qMin(dlc, uint(64)));
+    memcpy(tx_request->data, msg, std::min(dlc, uint8_t(64)));
 
     tx_message_fifo.write();
-    tx_message_fifo_mutex.unlock();
 
     return SendStatusOK;
 }
 
-bool ZZenoCANChannel::adjustTimeDrift(bool initial_adjustment)
+
+uint64_t ZZenoCANChannel::getSerialNumber()
 {
-    if (!initial_adjustment && usb_can_device->isInitClockCalibrationDone()) {
-        /* Just do a read device clock - so variables are updated */
-        getDeviceClock();
-        return false;
-    }
-
-    if (!adjustDeviceTimeDrift(initial_adjustment)) return false;
-    if (initial_adjustment) initial_timer_adjustment_done.ref();
-
-    return true;
-}
-
-quint64 ZZenoCANChannel::getSerialNumber()
-{
-    quint64 unique_device_nr = serial_number;
+    uint64_t unique_device_nr = serial_number;
     unique_device_nr <<= 8;
     unique_device_nr |= (channel_index & 0xff);
 
@@ -843,13 +828,14 @@ quint64 ZZenoCANChannel::getSerialNumber()
 
 int ZZenoCANChannel::getBusLoad()
 {
-    qint64 t0 = VxTimerBase::getCurrentTimeInUs();
-    qint64 delta_time_in_us = t0 - last_measure_time_in_us;
-    delta_time_in_us = qMax(delta_time_in_us, qint64(1));
+    auto t_now = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch();
+    uint64_t t0 = t_now.count();
+    uint64_t delta_time_in_us = t0 - last_measure_time_in_us;
+    delta_time_in_us = std::max(delta_time_in_us, uint64_t(1));
 
     // qDebug() << " busload delta time " << delta_time_in_ms << " active " << bus_active_bit_count << " rate " << bitrate;
 
-    qint64 busload = (bus_active_bit_count * 100000000) / (current_bitrate * delta_time_in_us);
+    uint64_t busload = (bus_active_bit_count * 100000000) / (current_bitrate * delta_time_in_us);
     last_measure_time_in_us = t0;
     bus_active_bit_count = 0;
     if ( busload > 100 ) busload = 100;
@@ -859,17 +845,17 @@ int ZZenoCANChannel::getBusLoad()
 
 void ZZenoCANChannel::queueMessage(ZenoCAN20Message& message)
 {
-    QMutexLocker lock(&rx_message_fifo_mutex);
+    std::lock_guard<std::mutex> lock(rx_message_fifo_mutex);
 
     if ( rx_message_fifo.available() == 0 ) {
-        qDebug() << "ZenoCAN-Ch" << channel_index << "Zeno: RX buffer overflow" << rx_message_fifo.count() << rx_message_fifo.isEmpty();
+        zDebug("ZenoCAN Ch%d Zeno: RX buffer overflow: %d - %d", channel_index+1,rx_message_fifo.count(), rx_message_fifo.isEmpty());
         return;
     }
 
-    rx_message_fifo_cond.wakeOne();
+    rx_message_fifo_cond.notify_one();
 
     FifoRxCANMessage* rx_message = rx_message_fifo.writePtr();
-    rx_message->timestamp = message.timestamp | (quint64(message.timestamp_msb) << 32);
+    rx_message->timestamp = message.timestamp | (uint64_t(message.timestamp_msb) << 32);
     rx_message->id        = message.id;
     rx_message->flags     = message.flags;
     rx_message->dlc       = message.dlc;
@@ -880,18 +866,15 @@ void ZZenoCANChannel::queueMessage(ZenoCAN20Message& message)
 
 void ZZenoCANChannel::queueMessageCANFDP1(ZenoCANFDMessageP1 &message_p1)
 {
-    // QByteArray b = QByteArray::fromRawData(reinterpret_cast<char*>(message_p1.data), int(18));
-    // qDebug() << "P1 data" << b.toHex('-');
-
     if ( message_p1.dlc <= 18 ) {
-        QMutexLocker lock(&rx_message_fifo_mutex);
+        std::lock_guard<std::mutex> lock(rx_message_fifo_mutex);
 
         if ( rx_message_fifo.available() == 0 ) {
-            qDebug() << "ZenoCAN-Ch" << channel_index << "P1 - Zeno: RX buffer overflow" << rx_message_fifo.count() << rx_message_fifo.isEmpty();
+            zDebug("ZenoCAN Ch%d P1 -Zeno: RX buffer overflow: %d - %d", channel_index+1,rx_message_fifo.count(), rx_message_fifo.isEmpty());
             return;
         }
 
-        rx_message_fifo_cond.wakeOne();
+        rx_message_fifo_cond.notify_one();
 
         FifoRxCANMessage* rx_message = rx_message_fifo.writePtr();
         rx_message->timestamp = message_p1.timestamp;
@@ -909,18 +892,15 @@ void ZZenoCANChannel::queueMessageCANFDP1(ZenoCANFDMessageP1 &message_p1)
 
 void ZZenoCANChannel::queueMessageCANFDP2(ZenoCANFDMessageP2 &message_p2)
 {
-    // QByteArray b = QByteArray::fromRawData(reinterpret_cast<char*>(message_p2.data), int(28));
-    // qDebug() << "P2 data" << b.toHex('-') << (canfd_msg_p1.dlc - 18) << canfd_msg_p1.dlc;
-
     if ( canfd_msg_p1.dlc <= 46 ) {
-        QMutexLocker lock(&rx_message_fifo_mutex);
+        std::lock_guard<std::mutex> lock(rx_message_fifo_mutex);
 
         if ( rx_message_fifo.available() == 0 ) {
-            qDebug() << "ZenoCAN-Ch" << channel_index << "P2 - Zeno: RX buffer overflow" << rx_message_fifo.count() << rx_message_fifo.isEmpty();
+            zDebug("ZenoCAN Ch%d P2 -Zeno: RX buffer overflow: %d - %d", channel_index+1,rx_message_fifo.count(), rx_message_fifo.isEmpty());
             return;
         }
 
-        rx_message_fifo_cond.wakeOne();
+        rx_message_fifo_cond.notify_one();
 
         FifoRxCANMessage* rx_message = rx_message_fifo.writePtr();
         rx_message->timestamp = canfd_msg_p1.timestamp;
@@ -943,20 +923,19 @@ void ZZenoCANChannel::queueMessageCANFDP3(ZenoCANFDMessageP3 &message_p3)
     // qDebug() << "P3 data" << b.toHex('-');
 
     if ( canfd_msg_p1.dlc < 46 ) {
-
         memset(&canfd_msg_p1, 0 , sizeof(canfd_msg_p1));
         memset(&canfd_msg_p2, 0 , sizeof(canfd_msg_p2));
         return;
     }
 
-    QMutexLocker lock(&rx_message_fifo_mutex);
+    std::lock_guard<std::mutex> lock(rx_message_fifo_mutex);
 
     if ( rx_message_fifo.available() == 0 ) {
-        qDebug() << "ZenoCAN-Ch" << channel_index << "P3 - Zeno: RX buffer overflow" << rx_message_fifo.count() << rx_message_fifo.isEmpty();
+        zDebug("ZenoCAN Ch%d P3 -Zeno: RX buffer overflow: %d - %d", channel_index+1,rx_message_fifo.count(), rx_message_fifo.isEmpty());
         return;
     }
 
-    rx_message_fifo_cond.wakeOne();
+    rx_message_fifo_cond.notify_one();
 
     FifoRxCANMessage* rx_message = rx_message_fifo.writePtr();
     rx_message->timestamp = canfd_msg_p1.timestamp;
@@ -977,7 +956,7 @@ void ZZenoCANChannel::queueMessageCANFDP3(ZenoCANFDMessageP3 &message_p3)
 void ZZenoCANChannel::txAck(ZenoTxCANRequestAck& tx_ack)
 {
     tx_message_fifo_mutex.lock();
-    tx_message_fifo_cond.wakeOne();
+    tx_message_fifo_cond.notify_one();
 
     // static int count = 0;
 
@@ -991,22 +970,18 @@ void ZZenoCANChannel::txAck(ZenoTxCANRequestAck& tx_ack)
 
             message.id = m.id;
             message.dlc = m.dlc;
-            message.flags = quint8(m.flags | ZenoCANFlagTxAck);
+            message.flags = uint8_t(m.flags | ZenoCANFlagTxAck);
             // message.dlc = tx_ack.dlc;
-            message.timestamp = tx_ack.timestamp | (quint64(tx_ack.timestamp_msb) << 32);
+            message.timestamp = tx_ack.timestamp | (uint64_t(tx_ack.timestamp_msb) << 32);
             memcpy(message.data, m.data, m.dlc);
 
-            // tx_message_fifo.removeAt(i);
             tx_request_count --;
-            if ( tx_request_count == 0 ) {
-            //      qDebug() << "ZenoCAN-Ch" << channel_index  << "TX done" << tx_ack.trans_id; //  << count;
-            }
-            Q_ASSERT(tx_request_count >= 0);
+            assert(tx_request_count >= 0);
 
             tx_message_fifo_mutex.unlock();
 
             if ( tx_ack.flags & ZenoCANErrorFrame ) {
-                qDebug() << "ZenoCAN-Ch" << channel_index  << "TX failed, remove pending TX";
+                zDebug("ZenoCAN Ch%d TX failed, remove pending TX", channel_index+1);;
                 flushTxFifo();
                 return;
             }
@@ -1014,24 +989,24 @@ void ZZenoCANChannel::txAck(ZenoTxCANRequestAck& tx_ack)
             rx_message_fifo_mutex.lock();
 
             if ( rx_message_fifo.available() == 0 ) {
-                qDebug() << "Zeno: RX buffer overflow (TxACK)" << rx_message_fifo.count() << rx_message_fifo.isEmpty();
+                zDebug("Zeno: RX buffer overflow (TxACK) fifo-count: %d-%d", rx_message_fifo.count(), rx_message_fifo.isEmpty());
                 rx_message_fifo_mutex.unlock();
                 return;
             }
             rx_message_fifo.write(message);
-            rx_message_fifo_cond.wakeOne();
+            rx_message_fifo_cond.notify_one();
 
             rx_message_fifo_mutex.unlock();
 
             return;
         }
 
-        qDebug() << "ZenoCAN-Ch" << channel_index << "*** Writing back to TX fifo" << m.transaction_id << tx_ack.trans_id << hex << m.id;
+        zDebug("ZenoCAN Ch%d *** Writing back to TX fifo TID%d-%d-%x", channel_index+1, m.transaction_id, tx_ack.trans_id, m.id);
         tx_message_fifo.write(m);
     }
 
     tx_message_fifo_mutex.unlock();
-    qCritical()  << "ZenoCAN-Ch" << channel_index  << "-- TX ack with transId: " << tx_ack.trans_id  << " not queued";
+    zDebug("ZenoCAN Ch%d -- TX ack with transId: %d not queued", channel_index+1, tx_ack.trans_id);
 }
 
 bool ZZenoCANChannel::getZenoDeviceTimeInUs(uint64_t& timestamp_in_us)
@@ -1047,7 +1022,7 @@ bool ZZenoCANChannel::getZenoDeviceTimeInUs(uint64_t& timestamp_in_us)
 
     if (!usb_can_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = usb_can_device->getLastErrorText();
-        qCritical() << "ERROR(ZenoUSB) Ch" << channel_index << " failed to read Zeno device clock: " << last_error_text;
+        zError("(ZenoUSB) Ch%d failed to read Zeno device clock: %s", channel_index+1, last_error_text.c_str());
         return false;
     }
 
@@ -1057,34 +1032,14 @@ bool ZZenoCANChannel::getZenoDeviceTimeInUs(uint64_t& timestamp_in_us)
     return true;
 }
 
-bool ZZenoCANChannel::getDeviceTimeInUs(qint64& timestamp_in_us)
-{
-    if (!checkOpen()) return false;
-
-    /* Read the clock from the Zeno device */
-    if (!getZenoDeviceTimeInUs(timestamp_in_us)) return false;
-    adjustDeviceTimerWrapAround(timestamp_in_us);
-
-    return true;
-}
-
-void ZZenoCANChannel::synchToTimer(VxTimerBase* timer)
-{
-    VxGenericPacketDevice::synchToTimerOffset(timer);
-}
 
 uint64_t ZZenoCANChannel::getDeviceClock()
 {
     if (!checkOpen()) return false;
 
-    qint64 t;
+    uint64_t t;
     /* Read the clock from the Zeno device */
     if (!getZenoDeviceTimeInUs(t)) return false;
-
-    timer_adjust_mutex.lock();
-    adjustDeviceTimerWrapAround(t);
-    t = calculateTimeDrift(t);
-    timer_adjust_mutex.unlock();
 
     return t;
 }
@@ -1096,13 +1051,13 @@ ZCANDriver* ZZenoCANChannel::getCANDriver() const
 
 void ZZenoCANChannel::flushRxFifo()
 {
-    QMutexLocker lock(&tx_message_fifo_mutex);
+    std::lock_guard<std::mutex> lock(tx_message_fifo_mutex);
     rx_message_fifo.clear();
 }
 
 void ZZenoCANChannel::flushTxFifo()
 {
-    QMutexLocker lock(&tx_message_fifo_mutex);
+    std::lock_guard<std::mutex> lock(tx_message_fifo_mutex);
     tx_message_fifo.clear();
     tx_request_count = 0;
     tx_next_trans_id = 0;
@@ -1113,30 +1068,31 @@ void ZZenoCANChannel::flushTxFifo()
 bool ZZenoCANChannel::checkOpen()
 {
     if (is_open.load() == 0) {
-        last_error_text = QString("CAN Channel %1 is not open").arg(channel_index);
+        last_error_text = "CAN Channel " + std::to_string(channel_index+1) + " is not open";
         return false;
     }
 
     return true;
 }
 
-bool ZZenoCANChannel::waitForSpaceInTxFifo(int& timeout_in_ms)
+bool ZZenoCANChannel::waitForSpaceInTxFifo(std::unique_lock<std::mutex>& lock, int& timeout_in_ms)
 {
-    VxReference<VxTimer> tx_timeout_timer = new VxTimer();
-    int time_left_in_ms = timeout_in_ms;
-    while ( time_left_in_ms > 0 &&
-            tx_message_fifo.count() >=  max_outstanding_tx_requests) {
-        bool wait_success;
+    auto t_start = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()).time_since_epoch();
+    std::chrono::milliseconds timeout(timeout_in_ms);
 
-        wait_success = tx_message_fifo_cond.wait(&tx_message_fifo_mutex, time_left_in_ms);
+    while ( timeout.count() > 0 &&
+            tx_message_fifo.count() >=  max_outstanding_tx_requests) {
+        std::cv_status wait_result;
+
+        wait_result = tx_message_fifo_cond.wait_for(lock, timeout);
         // qDebug()  << "ZenoCAN-Ch" << channel_index  << "wait for TX space" << tx_message_fifo.count() << tx_ack_received << wait_success;
 
-        time_left_in_ms -= tx_timeout_timer->elapsedInMs();
+        auto t_now = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()).time_since_epoch();
+        timeout -= (t_now - t_start);
 
-        if (!wait_success) break;
+        if (wait_result == std::cv_status::no_timeout) break;
     }
 
-    timeout_in_ms = time_left_in_ms;
-
+    timeout_in_ms = timeout.count();
     return tx_message_fifo.count() < max_outstanding_tx_requests;
 }

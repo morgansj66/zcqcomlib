@@ -85,7 +85,7 @@ void ZUSBContext::stopUnRef()
     start_ref_count --;
     assert(start_ref_count >= 0);
     if ( start_ref_count == 0 ) {
-        Q_ASSERT(usb_event_thread != nullptr);
+        assert(usb_event_thread != nullptr);
         usb_event_thread->waitAndDelete();
         usb_event_thread = nullptr;
     }
@@ -111,7 +111,7 @@ bool ZUSBContext::handleEvents(timeval& time_val, int& completed)
 
 std::string ZUSBContext::translateLibUSBErrorCode(int error_code)
 {
-    QString error_text;
+    std::string error_text;
 
     switch(error_code) {
     case LIBUSB_SUCCESS:

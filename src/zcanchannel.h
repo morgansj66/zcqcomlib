@@ -46,7 +46,10 @@ protected:
     ZCANChannel() { }
 
 public:
+    virtual const std::string getObjectText() const = 0;
+    virtual const std::string getDevicetText() const = 0;
     virtual const std::string getLastErrorText() = 0;
+    virtual int getChannelNr() = 0;
     virtual bool open(int open_flags) = 0;
     virtual bool close() = 0;
     virtual uint32_t getCapabilites() = 0;

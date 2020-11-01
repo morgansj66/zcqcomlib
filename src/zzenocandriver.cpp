@@ -216,8 +216,8 @@ std::vector<ZRef<ZZenoUSBDevice> > ZZenoCANDriver::getZenoDeviceList() const
 
 void ZZenoCANDriver::init()
 {
-    product_id_table[ZENO_CANUNO_PRODUCT_ID]    = "Zeno CANuno";
-    product_id_table[ZENO_CANQUATRO_PRODUCT_ID] = "Zeno CANquatro";
+    product_id_table[ZENO_CANUNO_PRODUCT_ID]    = "Zeno 42x CANuno";
+    product_id_table[ZENO_CANQUATRO_PRODUCT_ID] = "Zeno 42x CANquatro";
 
     enumerateDevices();
 }

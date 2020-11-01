@@ -1244,7 +1244,7 @@ canStatus CANLIBAPI canReadSpecificSkip (const CanHandle hnd,
  */
 canStatus CANLIBAPI canSetNotify (const CanHandle hnd,
                                   void (*callback)(canNotifyData *),
-                                  unsigned int notifyFlags,
+                                  unsigned int notify_fFlags,
                                   void *tag);
 
 /**
@@ -1260,7 +1260,7 @@ canStatus CANLIBAPI canSetNotify (const CanHandle hnd,
  * \return \ref canERR_xxx (negative) if failure
  *
  */
-canStatus CANLIBAPI canGetRawHandle (const CanHandle hnd, void *pvFd);
+canStatus CANLIBAPI canGetRawHandle (const CanHandle hnd, void *raw_handle_ptr);
 
 /**
  * \ingroup CAN
@@ -1325,7 +1325,7 @@ canStatus CANLIBAPI canTranslateBaud (long *const freq,
  * \sa \ref section_code_snippets_cangeterrortext
  *
  */
-canStatus CANLIBAPI canGetErrorText (canStatus err, char *buf, unsigned int bufsiz);
+canStatus CANLIBAPI canGetErrorText (canStatus error_code, char *buffer, unsigned int buffer_size);
 
 /**
  * \ingroup  can_general
@@ -1477,7 +1477,7 @@ CanHandle CANLIBAPI canOpenChannel (int channel, int flags);
  * \sa \ref section_code_snippets_cangetchanneldata, \ref page_user_guide_virtual
  * \sa \ref canGetChannelData()
  */
-canStatus CANLIBAPI canGetNumberOfChannels (int *channelCount);
+canStatus CANLIBAPI canGetNumberOfChannels (int *channel_count);
 
 
 /**
@@ -1537,7 +1537,7 @@ canStatus CANLIBAPI canGetNumberOfChannels (int *channelCount);
 canStatus CANLIBAPI canGetChannelData (int channel,
                                        int item,
                                        void *buffer,
-                                       size_t bufsize);
+                                       size_t buffer_size);
 
 /**
  * \ingroup can_general

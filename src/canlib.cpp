@@ -31,26 +31,120 @@
  */
 
 #include "canlib.h"
+#include "zcqcore.h"
+#include "zcanchannel.h"
+#include <string.h>
+#include <mutex>
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+/*** ---------------------------==*+*+*==---------------------------------- ***/
+#define CANLIB_PRODUCT_MAJOR_VERSION (8 - 3)
+#define CANLIB_MAJOR_VERSION 8
+#define CANLIB_MINOR_VERSION 26
+#define CANLIB_BUILD_VERSION 214
+
+/*** ---------------------------==*+*+*==---------------------------------- ***/
+static const char *canlib_error_text_list[] = {
+  "No error",                        // canOK
+  "Error in parameter",              // canERR_PARAM
+  "No messages available",           // canERR_NOMSG
+  "Specified device not found",      // canERR_NOTFOUND
+  "Out of memory",                   // canERR_NOMEM
+  "No channels available",           // canERR_NOCHANNELS
+  "Interrupted by signal",           // canERR_INTERRUPTED
+  "Timeout occurred",                // canERR_TIMEOUT
+  "Library not initialized",         // canERR_NOTINITIALIZED
+  "No more handles",                 // canERR_NOHANDLES
+  "Handle is invalid",               // canERR_INVHANDLE
+  "Unknown error (-11)",             // canERR_INIFILE
+  "CAN driver type not supported",   // canERR_DRIVER
+  "Transmit buffer overflow",        // canERR_TXBUFOFL
+  "Unknown error (-14)",             // canERR_RESERVED_1
+  "A hardware error was detected",   // canERR_HARDWARE
+  "Can not find requested DLL",      // canERR_DYNALOAD
+  "DLL seems to be wrong version",   // canERR_DYNALIB
+  "Error initializing DLL or driver", // canERR_DYNAINIT
+  "Operation not supported by hardware or firmware", // canERR_NOT_SUPPORTED
+  "Unknown error (-20)",             // canERR_RESERVED_5
+  "Unknown error (-21)",             // canERR_RESERVED_6
+  "Unknown error (-22)",             // canERR_RESERVED_2
+  "Can not load or open the device driver", // canERR_DRIVERLOAD
+  "The I/O request failed, probably due to resource shortage", //canERR_DRIVERFAILED
+  "Unknown error (-25)",             // canERR_NOCONFIGMGR
+  "Card not found",                  // canERR_NOCARD
+  "Unknown error (-27)",             // canERR_RESERVED_7
+  "Config not found",                // canERR_REGISTRY
+  "The license is not valid",        // canERR_LICENSE
+  "Internal error in the driver",    // canERR_INTERNAL
+  "Access denied",                   // canERR_NO_ACCESS
+  "Not implemented",                 // canERR_NOT_IMPLEMENTED
+  "Device File error",               // canERR_DEVICE_FILE
+  "Host File error",                 // canERR_HOST_FILE
+  "Disk error",                      // canERR_DISK
+  "CRC error",                       // canERR_CRC
+  "Config error",                    // canERR_CONFIG
+  "Memo failure",                    // canERR_MEMO_FAIL
+  "Script error",                    // canERR_SCRIPT_FAIL
+  "Script version mismatch",         // canERR_SCRIPT_WRONG_VERSION
+  "Script container version mismatch",  // canERR_SCRIPT_TXE_CONTAINER_VERSION
+  "Script container format error",   // canERR_SCRIPT_TXE_CONTAINER_FORMAT
+  "Buffer provided too small to hold data",           // canERR_BUFFER_TOO_SMALL
+  "I/O pin doesn't exist or I/O pin type mismatch",   // canERR_IO_WRONG_PIN_TYPE
+  "I/O pin configuration is not confirmed",           // canERR_IO_NOT_CONFIRMED,
+  "Configuration changed after last call to kvIoConfirmConfig",  // canERR_IO_CONFIG_CHANGED
+  "The previous I/O pin value has not yet changed the output and is still pending", //canERR_IO_PENDING
+};
+/*** ---------------------------==*+*+*==---------------------------------- ***/
+
+#define MAX_CANLIB_HANDLES 128
+static ZRef<ZCANChannel> handle_map_list[MAX_CANLIB_HANDLES];
+static std::mutex open_close_mutex;
+
+static inline ZCANChannel* getChannel(CanHandle handle)
+{
+    if ( handle < 0 || handle >= MAX_CANLIB_HANDLES ) return nullptr;
+    return handle_map_list[handle];
+}
+
+/*** ---------------------------==*+*+*==---------------------------------- ***/
 void CANLIBAPI canInitializeLibrary (void)
 {
+    initializeZCQCommLibrary();
 }
 
 canStatus CANLIBAPI canClose (const CanHandle handle)
 {
-    return canERR_NOT_IMPLEMENTED;
+    std::lock_guard<std::mutex> lock(open_close_mutex);
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    can_channel->close();
+    handle_map_list[handle] = nullptr;
+
+    return canOK;
 }
 
 canStatus CANLIBAPI canBusOn (const CanHandle handle)
 {
-    return canERR_NOT_IMPLEMENTED;
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    bool r = can_channel->busOn();
+    if (!r) return canERR_INTERNAL;
+
+    return canOK;
 }
 
 canStatus CANLIBAPI canBusOff (const CanHandle handle)
 {
-    return canERR_NOT_IMPLEMENTED;
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    bool r = can_channel->busOff();
+    if (!r) return canERR_INTERNAL;
+
+    return canOK;
 }
 
 canStatus CANLIBAPI canSetBusParams (const CanHandle handle,
@@ -58,10 +152,16 @@ canStatus CANLIBAPI canSetBusParams (const CanHandle handle,
                                      unsigned int tseg1,
                                      unsigned int tseg2,
                                      unsigned int sjw,
-                                     unsigned int noSamp,
+                                     unsigned int no_samp,
                                      unsigned int syncmode)
 {
-    return canERR_NOT_IMPLEMENTED;
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    bool r = can_channel->setBusParameters(freq,70,sjw);
+    if (!r) return canERR_INTERNAL;
+
+    return canOK;
 }
 
 canStatus CANLIBAPI canSetBusParamsFd(const CanHandle handle,
@@ -70,7 +170,13 @@ canStatus CANLIBAPI canSetBusParamsFd(const CanHandle handle,
                                       unsigned int tseg2_brs,
                                       unsigned int sjw_brs)
 {
-    return canERR_NOT_IMPLEMENTED;
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    bool r = can_channel->setBusParametersFd(freq_brs,70,sjw_brs);
+    if (!r) return canERR_INTERNAL;
+
+    return canOK;
 }
 
 canStatus CANLIBAPI canGetBusParams (const CanHandle handle,
@@ -81,6 +187,9 @@ canStatus CANLIBAPI canGetBusParams (const CanHandle handle,
                                      unsigned int *noSamp,
                                      unsigned int *syncmode)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -90,6 +199,9 @@ canStatus CANLIBAPI canGetBusParamsFd(const CanHandle handle,
                                       unsigned int *tseg2_brs,
                                       unsigned int *sjw_brs)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -193,13 +305,13 @@ canStatus CANLIBAPI canReadSpecificSkip (const CanHandle handle,
 
 canStatus CANLIBAPI canSetNotify (const CanHandle handle,
                                   void (*callback)(canNotifyData *),
-                                  unsigned int notif_fFlags,
+                                  unsigned int notify_fFlags,
                                   void *tag)
 {
     return canERR_NOT_IMPLEMENTED;
 }
 
-canStatus CANLIBAPI canGetRawHandle (const CanHandle handle, void *pvFd)
+canStatus CANLIBAPI canGetRawHandle (const CanHandle handle, void *raw_handle_ptr)
 {
     return canERR_NOT_IMPLEMENTED;
 }
@@ -214,14 +326,23 @@ canStatus CANLIBAPI canTranslateBaud (long *const freq,
     return canERR_NOT_IMPLEMENTED;
 }
 
-canStatus CANLIBAPI canGetErrorText (canStatus err, char *buf, unsigned int bufsiz)
+canStatus CANLIBAPI canGetErrorText (canStatus error_code, char *buffer,
+                                     unsigned int buffer_size)
 {
-    return canERR_NOT_IMPLEMENTED;
+    unsigned int error_code_index;
+    if (!buffer || buffer_size == 0) return canERR_PARAM;
+
+    error_code_index = -error_code;
+    if (error_code_index >= sizeof(canlib_error_text_list) / sizeof(const char *)) return canERR_PARAM;
+
+    strncpy(buffer, canlib_error_text_list[error_code_index], buffer_size);
+
+    return canOK;
 }
 
 unsigned short CANLIBAPI canGetVersion (void)
 {
-    return 14;
+    return (CANLIB_MAJOR_VERSION << 8) + CANLIB_MINOR_VERSION;
 }
 
 canStatus CANLIBAPI canIoCtl (const CanHandle handle,
@@ -242,17 +363,105 @@ CanHandle CANLIBAPI canOpenChannel (int channel, int flags)
     return canERR_NOT_IMPLEMENTED;
 }
 
-canStatus CANLIBAPI canGetNumberOfChannels (int *channelCount)
+canStatus CANLIBAPI canGetNumberOfChannels (int *channel_count)
 {
-    return canERR_NOT_IMPLEMENTED;
+    if ( channel_count == nullptr ) return canERR_PARAM;
+    *channel_count = getNumberOfZCQCANChannels();
+
+    return canOK;
 }
 
 
 canStatus CANLIBAPI canGetChannelData (int channel,
                                        int item,
                                        void *buffer,
-                                       size_t bufsize)
+                                       size_t buffer_size)
 {
+    if ( buffer == nullptr || buffer_size == 0 ) return canERR_PARAM;
+    if  ( channel < 0 || channel >= getNumberOfZCQCANChannels() ) return canERR_PARAM;
+    switch(item) {
+    case canCHANNELDATA_CHANNEL_NAME: {
+        std::string channel_text;
+        if (getCANDeviceLocalChannelName(channel,channel_text) < 0)
+            return canERR_INTERNAL;
+
+        strncpy(static_cast<char*>(buffer), channel_text.c_str(), buffer_size - 1);
+        return canOK;
+    }
+
+    case canCHANNELDATA_CHAN_NO_ON_CARD: {
+        if (buffer_size < sizeof(int)) {
+            return canERR_PARAM;
+        }
+        int channel_nr = getCANDeviceLocalChannelNr(channel);
+        if ( channel_nr < 0 ) return canERR_INTERNAL;
+
+        memcpy(buffer, &channel_nr, sizeof(int));
+        return canOK;
+    }
+
+    case canCHANNELDATA_DEVDESCR_ASCII: {
+        std::string device_description;
+        if (getCANDeviceDescription(channel,device_description) < 0)
+            return canERR_INTERNAL;
+
+        strncpy(static_cast<char*>(buffer), device_description.c_str(), buffer_size - 1);
+        return canOK;
+    }
+    case canCHANNELDATA_CARD_UPC_NO: {
+        return canOK;
+    }
+    case canCHANNELDATA_DRIVER_NAME:
+        strncpy(static_cast<char*>(buffer), "zcqdrv", buffer_size - 1);
+        return canOK;
+    case canCHANNELDATA_MFGNAME_ASCII:
+        strncpy(static_cast<char*>(buffer), "Zuragon LTD", buffer_size - 1);
+        return canOK;
+
+    case canCHANNELDATA_DLL_FILE_VERSION: {
+        unsigned short *p = (unsigned short *)buffer;
+        if (buffer_size < 8) return canERR_PARAM;
+        *p++ = 0;
+        *p++ = CANLIB_BUILD_VERSION;
+        *p++ = CANLIB_MINOR_VERSION;
+        *p++ = CANLIB_MAJOR_VERSION;
+        return canOK;
+    }
+
+    case canCHANNELDATA_DLL_PRODUCT_VERSION: {
+        unsigned short *p = (unsigned short *)buffer;
+        if (buffer_size < 8) return canERR_PARAM;
+        *p++ = 0;
+        *p++ = 0;
+        *p++ = CANLIB_MINOR_VERSION;
+        *p++ = CANLIB_PRODUCT_MAJOR_VERSION;
+        return canOK;
+    }
+
+    case canCHANNELDATA_TRANS_CAP:
+    case canCHANNELDATA_TRANS_SERIAL_NO:
+    case canCHANNELDATA_TRANS_UPC_NO:
+    case canCHANNELDATA_DLL_FILETYPE:
+    case canCHANNELDATA_DEVICE_PHYSICAL_POSITION:
+    case canCHANNELDATA_UI_NUMBER:
+    case canCHANNELDATA_TIMESYNC_ENABLED:
+    case canCHANNELDATA_MFGNAME_UNICODE:
+    case canCHANNELDATA_DEVDESCR_UNICODE:
+    case canCHANNELDATA_CHANNEL_QUALITY:
+    case canCHANNELDATA_ROUNDTRIP_TIME:
+    case canCHANNELDATA_BUS_TYPE:
+    case canCHANNELDATA_TIME_SINCE_LAST_SEEN:
+    case canCHANNELDATA_DEVNAME_ASCII:
+    case canCHANNELDATA_REMOTE_OPERATIONAL_MODE:
+    case canCHANNELDATA_REMOTE_PROFILE_NAME:
+    case canCHANNELDATA_REMOTE_HOST_NAME:
+    case canCHANNELDATA_REMOTE_MAC:
+      return canERR_NOT_IMPLEMENTED;
+
+    default:
+      return canERR_NOT_IMPLEMENTED;
+    }
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -271,9 +480,27 @@ canStatus CANLIBAPI canGetDriverMode (const CanHandle handle, int *lineMode, int
     return canERR_NOT_IMPLEMENTED;
 }
 
-unsigned int CANLIBAPI canGetVersionEx (unsigned int itemCode)
+unsigned int CANLIBAPI canGetVersionEx (unsigned int item_code)
 {
-    return canERR_NOT_IMPLEMENTED;
+    switch (item_code) {
+    case canVERSION_CANLIB32_VERSION:
+        return (CANLIB_MAJOR_VERSION << 8) + CANLIB_MINOR_VERSION;
+
+    case canVERSION_CANLIB32_PRODVER:
+        return (CANLIB_PRODUCT_MAJOR_VERSION << 8) + CANLIB_MINOR_VERSION;
+
+    case canVERSION_CANLIB32_PRODVER32:
+        return (CANLIB_MAJOR_VERSION << 16) +
+               (CANLIB_MINOR_VERSION << 8);
+
+    case canVERSION_CANLIB32_BETA:
+        return 0;
+
+    default:
+        return 0;
+    }
+
+    return canOK;
 }
 
 canStatus CANLIBAPI canObjBufFreeAll (const CanHandle handle)
@@ -364,7 +591,8 @@ canStatus CANLIBAPI canWriteWait (const CanHandle handle,
 
 canStatus CANLIBAPI canUnloadLibrary (void)
 {
-    return canERR_NOT_IMPLEMENTED;
+    uninitializeZCQCommLibrary();
+    return canOK;
 }
 
 canStatus CANLIBAPI canSetAcceptanceFilter (const CanHandle handle,

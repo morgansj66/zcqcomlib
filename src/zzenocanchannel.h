@@ -47,8 +47,10 @@ public:
     ZZenoCANChannel(int _channel_index, ZZenoUSBDevice* _usb_can_device);
     ~ZZenoCANChannel() override;
 
-    const std::string getObjectText() const;
+    const std::string getObjectText() const override;
+    const std::string getDevicetText() const override;
     const std::string getLastErrorText() override;
+    int getChannelNr() override;
     bool open(int open_flags) override;
     bool close() override;
     uint32_t getCapabilites() override;

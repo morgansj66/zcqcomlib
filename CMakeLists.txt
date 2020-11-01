@@ -11,6 +11,7 @@ set(SOURCES
   src/canlib.cpp
   src/linlib.cpp
   src/zdebug.cpp
+  src/zcqcore.cpp
   src/zusbcontext.cpp
   src/zusbeventthread.cpp
   src/zzenocanchannel.cpp
@@ -31,6 +32,7 @@ set(HEADERS
   src/zglobal.h
   src/zdebug.h
   src/zring.h
+  src/zcqcore.h
   src/zrefcountingobjbase.h
   src/zcanchannel.h
   src/zcandriver.h

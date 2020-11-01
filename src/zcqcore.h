@@ -29,60 +29,25 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef ZCANDRIVER_H_
-#define ZCANDRIVER_H_
 
-#include "zrefcountingobjbase.h"
+#ifndef ZCQCORE_H
+#define ZCQCORE_H
+
+#include "zglobal.h"
 #include <string>
 
-class ZCANChannel;
-class ZCANDriver : public ZRefCountingObjBase {
-protected:
-    ZCANDriver(const std::string& _name, const std::string& _description)
-    : driver_priority_order(50), name(_name), description(_description)
-    {
-        /* no op */
-    }
+void initializeZCQCommLibrary();
 
-public:
-    virtual ~ZCANDriver() { /* no op */ }
+void uninitializeZCQCommLibrary();
 
-    virtual const std::string getObjectText() const = 0;    
-    virtual int getNumberOfChannels() = 0;
-    virtual const std::string getChannelName(int channel_index) = 0;
-    virtual ZCANChannel* getChannel(int channel_index) = 0;
+int getNumberOfZCQCANChannels();
 
-    int getDriverPriorityOrder() const {
-        return driver_priority_order;
-    }
+int getNumberOfZCQLINChannels();
 
-    const std::string& getName() {
-        return name;
-    }
+int getCANDeviceLocalChannelNr(int can_channel_index);
 
-    const std::string& getDescription() {
-        return description;
-    }
+int getCANDeviceLocalChannelName(int can_channel_index, std::string& channel_name);
 
-    /**
-     * @return true if device list has changed since last time
-     */
-    virtual bool enumerateDevices() = 0;
+int getCANDeviceDescription(int can_channel_index, std::string& device_description);
 
-    virtual void driverRef() { /* Optionally implemented */ }
-
-    virtual void driverUnref() { /* Optionally implemented */ }
-
-protected:
-    void setDriverPriorityOrder(int _driver_priority_order) {
-        driver_priority_order = _driver_priority_order;
-    }
-
-private:
-    int driver_priority_order;
-
-    std::string name;
-    std::string description;
-};
-
-#endif /* ZCANDRIVER_H_ */
+#endif /* ZCQCORE_H */

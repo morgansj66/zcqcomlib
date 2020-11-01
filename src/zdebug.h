@@ -39,7 +39,8 @@
 extern "C" {
 #endif /* __cplusplus */
 
-#define __ZLSTR(x) #x
+#define ___ZLSTR(x) #x
+#define __ZLSTR(x) ___ZLSTR(x)
 #define zDebug(...) f__zDebug(__FILE__,ZFUNC_INFO,__ZLSTR(__LINE__),__VA_ARGS__)
 void f__zDebug(const char* file, const char* func, const char* line, const char* format, ...);//  ZATTR_FORMAT_PRINTF(4,5);
 

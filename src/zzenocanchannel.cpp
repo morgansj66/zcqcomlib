@@ -79,9 +79,19 @@ const std::string ZZenoCANChannel::getObjectText() const
     return channel_name;
 }
 
+const std::string ZZenoCANChannel::getDevicetText() const
+{
+    return usb_can_device->getObjectText();
+}
+
 const std::string ZZenoCANChannel::getLastErrorText()
 {
     return last_error_text;
+}
+
+int ZZenoCANChannel::getChannelNr()
+{
+    return channel_index;
 }
 
 bool ZZenoCANChannel::open(int open_flags)

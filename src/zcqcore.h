@@ -50,4 +50,10 @@ int getCANDeviceLocalChannelName(int can_channel_index, std::string& channel_nam
 
 int getCANDeviceDescription(int can_channel_index, std::string& device_description);
 
+int getCANDeviceFWVersion(int can_channel_index, uint32_t& fw_version);
+
+int getCANDeviceSerialNumber(int can_channel_index, uint64_t& serial_number);
+
+int getCANDeviceProductCode(int can_channel_index, uint64_t& product_code);
+
 #endif /* ZCQCORE_H */

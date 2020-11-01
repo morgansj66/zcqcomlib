@@ -33,6 +33,7 @@
 #include "canlib.h"
 #include "zcqcore.h"
 #include "zcanchannel.h"
+#include "zdebug.h"
 #include <string.h>
 #include <mutex>
 
@@ -409,6 +410,33 @@ canStatus CANLIBAPI canGetChannelData (int channel,
         return canOK;
     }
     case canCHANNELDATA_CARD_UPC_NO: {
+        uint64_t *p = static_cast<uint64_t*>(buffer);
+        if (buffer_size < 8) return canERR_PARAM;
+        if (getCANDeviceProductCode(channel,*p) < 0)
+            return canERR_INTERNAL;
+
+        return canOK;
+    }
+    case canCHANNELDATA_CARD_FIRMWARE_REV: {
+        uint32_t *p = static_cast<uint32_t*>(buffer);
+        if (buffer_size < 8) return canERR_PARAM;
+
+        uint32_t fw_version;
+        if (getCANDeviceFWVersion(channel,fw_version) < 0)
+            return canERR_INTERNAL;
+
+        p[0] = (fw_version & 0xff);
+        p[1] = ((fw_version >>  8) & 0xff) |
+               (((fw_version >> 16) & 0xff) << 16);
+
+        return canOK;
+    }
+    case canCHANNELDATA_CARD_SERIAL_NO: {
+        uint64_t *p = static_cast<uint64_t*>(buffer);
+        if (buffer_size < 8) return canERR_PARAM;
+        if (getCANDeviceSerialNumber(channel,*p) < 0)
+            return canERR_INTERNAL;
+
         return canOK;
     }
     case canCHANNELDATA_DRIVER_NAME:
@@ -419,7 +447,7 @@ canStatus CANLIBAPI canGetChannelData (int channel,
         return canOK;
 
     case canCHANNELDATA_DLL_FILE_VERSION: {
-        unsigned short *p = (unsigned short *)buffer;
+        uint16_t *p = static_cast<uint16_t*>(buffer);
         if (buffer_size < 8) return canERR_PARAM;
         *p++ = 0;
         *p++ = CANLIB_BUILD_VERSION;

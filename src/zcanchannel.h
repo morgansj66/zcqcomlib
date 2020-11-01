@@ -81,6 +81,16 @@ public:
         return uint64_t(-1);
     }
 
+    virtual uint32_t getFirmwareVersion() {
+        /* Optionally implemented */
+        return uint32_t(-1);
+    }
+
+    virtual uint64_t getProductCode() {
+        /* Optionally implemented */
+        return uint64_t(-1);
+    }
+
     virtual int getBusLoad() = 0;
 
     virtual ZCANDriver* getCANDriver() const = 0;

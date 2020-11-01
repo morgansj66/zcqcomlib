@@ -171,7 +171,7 @@ void ZZenoUSBDevice::retrieveDeviceInfo()
 
     zeno_clock_resolution = info_response->clock_resolution;
     serial_number = info_response->serial_number;
-    fw_version = info_response->serial_number;
+    fw_version = info_response->fw_version;
 
     can_channel_list.clear();
     for( int i = 0; i < info_response->can_channel_count; ++i ) {

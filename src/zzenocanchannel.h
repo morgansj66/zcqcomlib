@@ -66,7 +66,10 @@ public:
     SendResult send(const uint32_t id, const uint8_t *msg,
                     const uint8_t dlc, const uint32_t flags,
                     int timeout_in_ms) override;
+
     uint64_t getSerialNumber() override;
+    uint32_t getFirmwareVersion() override;
+    uint64_t getProductCode() override;
 
     int getBusLoad() override;
 

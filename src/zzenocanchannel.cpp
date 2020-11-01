@@ -836,6 +836,17 @@ uint64_t ZZenoCANChannel::getSerialNumber()
     return serial_number;
 }
 
+uint32_t ZZenoCANChannel::getFirmwareVersion()
+{
+    return usb_can_device->getFWVersion();
+}
+
+uint64_t ZZenoCANChannel::getProductCode()
+{
+    uint64_t product_code = 0x4ced7a332a86e499UL;
+    return product_code;
+}
+
 int ZZenoCANChannel::getBusLoad()
 {
     auto t_now = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch();

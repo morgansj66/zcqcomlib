@@ -130,3 +130,36 @@ int getCANDeviceDescription(int can_channel_index, std::string& device_descripti
 
     return 0;
 }
+
+int getCANDeviceFWVersion(int can_channel_index, uint32_t& fw_version)
+{
+    if ( __instance == nullptr ) return -1;
+    assert(can_channel_index >=0);
+    assert(can_channel_index < int(__instance->can_channel_list.size()));
+
+    fw_version = __instance->can_channel_list[can_channel_index]->getFirmwareVersion();
+
+    return 0;
+}
+
+int getCANDeviceProductCode(int can_channel_index, uint64_t& product_code)
+{
+    if ( __instance == nullptr ) return -1;
+    assert(can_channel_index >=0);
+    assert(can_channel_index < int(__instance->can_channel_list.size()));
+
+    product_code = __instance->can_channel_list[can_channel_index]->getProductCode();
+
+    return 0;
+}
+
+int getCANDeviceSerialNumber(int can_channel_index, uint64_t& serial_number)
+{
+    if ( __instance == nullptr ) return -1;
+    assert(can_channel_index >=0);
+    assert(can_channel_index < int(__instance->can_channel_list.size()));
+
+    serial_number = __instance->can_channel_list[can_channel_index]->getSerialNumber();
+
+    return 0;
+}

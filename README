@@ -1,0 +1,24 @@
+Zeno 42x communication library
+------------------------------
+
+This is a generic communication library for CAN and LIN, compatible with Kvaser CANlib and PEAK basic library.
+Supported HW is the Zuragon Zeno CANquatro 42x. More information can be found at https://www.zuragon.com/zeno/#zeno42xcanquatro.
+
+Build instructions
+------------------
+
+Requirements is C++-14 and CMake, and libusb
+
+On Linux based OS:
+$ mkdir build
+$ cd build
+$ cmake ..
+$ make
+$ make install
+
+Windows
+-------
+
+Requirement is Visual Studio 2017 or later and libusb.
+
+TODO: detailed instructions is comming sooon

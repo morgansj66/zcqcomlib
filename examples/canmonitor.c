@@ -72,10 +72,13 @@ static void printUsageAndExit(char *prgName)
   exit(1);
 }
 
+#if 0
 static void sighand(int sig)
 {
   (void)sig;
 }
+#endif
+
 
 static char* busStatToStr(const unsigned long flag) {
     char* tempStr = NULL;
@@ -130,9 +133,11 @@ int main(int argc, char *argv[])
 
   printf("Reading messages on channel %d\n", channel);
 
+#if 0
   /* Allow signals to interrupt syscalls */
   signal(SIGINT, sighand);
   siginterrupt(SIGINT, 1);
+#endif
 
   canInitializeLibrary();
 

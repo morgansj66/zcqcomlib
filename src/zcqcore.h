@@ -36,9 +36,12 @@
 #include "zglobal.h"
 #include <string>
 
+class ZCANChannel;
 void initializeZCQCommLibrary();
 
 void uninitializeZCQCommLibrary();
+
+ZCANChannel* getCANChannel(int can_channel_index);
 
 int getNumberOfZCQCANChannels();
 

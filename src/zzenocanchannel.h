@@ -67,6 +67,8 @@ public:
                     const uint8_t dlc, const uint32_t flags,
                     int timeout_in_ms) override;
 
+    void setEventCallback(std::function<void(const EventData&)> callback) override;
+
     uint64_t getSerialNumber() override;
     uint32_t getFirmwareVersion() override;
     uint64_t getProductCode() override;
@@ -130,6 +132,9 @@ private:
         uint8_t data[64];
     };
 
+    void dispatchRXEvent(FifoRxCANMessage* rx_message);
+    void dispatchTXEvent(FifoRxCANMessage* rx_message);
+
     ZenoCANFDMessageP1 canfd_msg_p1;
     ZenoCANFDMessageP2 canfd_msg_p2;
 
@@ -149,6 +154,8 @@ private:
 
     // std::mutex timer_adjust_mutex;
     uint base_clock_divisor;
+
+    std::function<void(const EventData&)> event_callback;
 
     friend class ZZenoUSBDevice;
 };

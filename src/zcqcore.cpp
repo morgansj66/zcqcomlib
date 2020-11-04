@@ -89,6 +89,15 @@ void uninitializeZCQCommLibrary()
     }
 }
 
+ZCANChannel* getCANChannel(int can_channel_index)
+{
+    if ( __instance == nullptr ) return nullptr;
+    if (can_channel_index < 0) return nullptr;
+    if (can_channel_index >= int(__instance->can_channel_list.size())) return nullptr;
+
+    return __instance->can_channel_list[can_channel_index].get();
+}
+
 int getNumberOfZCQCANChannels()
 {
     if ( __instance == nullptr ) return 0;

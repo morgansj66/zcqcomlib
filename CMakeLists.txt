@@ -12,6 +12,7 @@ set(SOURCES
   src/linlib.cpp
   src/zdebug.cpp
   src/zcqcore.cpp
+  src/PCANBasic.cpp
   src/zusbcontext.cpp
   src/zusbeventthread.cpp
   src/zzenocanchannel.cpp
@@ -29,10 +30,11 @@ set(HEADERS
   include/vcanevt.h
   include/zpushpack.h
   include/zpoppack.h
+  include/PCANBasic.h
   src/zglobal.h
   src/zdebug.h
   src/zring.h
-  src/zcqcore.h
+  src/zcqcore.h  
   src/zrefcountingobjbase.h
   src/zcanchannel.h
   src/zcandriver.h

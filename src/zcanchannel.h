@@ -36,6 +36,7 @@
 #include "zcanflags.h"
 #include "zrefcountingobjbase.h"
 #include <stdint.h>
+#include <functional>
 #include <string>
 
 class ZCANDriver;
@@ -66,13 +67,40 @@ public:
     }
     virtual bool setDriverMode(DriverMode driver_mode) = 0;
     virtual ReadResult readWait(uint32_t& id, uint8_t *msg,
-                                uint8_t& dlc, uint32_t& flag,
+                                uint8_t& dlc, uint32_t& flags,
                                 uint64_t& driver_timestmap_in_us,
                                 int timeout_in_ms) = 0;
 
     virtual SendResult send(const uint32_t id, const uint8_t *msg,
                             const uint8_t dlc, const uint32_t flag,
                             int timeout_in_ms) = 0;
+
+    enum EventTypeID {
+        RX,
+        TX,
+        Error,
+        Status,
+    };
+
+    struct EventData {
+        EventTypeID event_type;
+        uint64_t timetstamp;
+        union {
+            struct {
+                uint32_t id;
+                uint8_t msg[64];
+                uint8_t dlc;
+                uint32_t flags;
+            } msg;
+            struct {
+                uint8_t bus_status;
+                uint32_t tx_error_count;
+                uint32_t rx_error_count;
+            } status;
+        } d;
+    };
+
+    virtual void setEventCallback(std::function<void(const EventData&)> callback) = 0;
 
     virtual uint64_t getDeviceClock() = 0;
 

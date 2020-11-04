@@ -341,10 +341,11 @@ bool ZZenoLINChannel::clearSlaveResponses()
     return true;
 }
 
-bool ZZenoLINChannel::readFromRXFifo(ZenoLINMessage& rx, int timeout_in_ms)
+bool ZZenoLINChannel::readFromRXFifo(ZenoLINMessage& rx, uint64_t timeout_in_ms)
 {
     std::unique_lock<std::mutex> lock(rx_message_fifo_mutex);
 
+    zDebug("rx_message_fifo.isEmpty() %d - %Ld", rx_message_fifo.isEmpty(), timeout_in_ms);
     if ( rx_message_fifo.isEmpty()) {
         std::chrono::milliseconds timeout(timeout_in_ms);
 
@@ -370,7 +371,7 @@ ZLINChannel::ReadResult ZZenoLINChannel::readWait(uint8_t& pid, uint8_t *msg,
                                                   int timeout_in_ms)
 {
     ZenoLINMessage rx;
-    if (!readFromRXFifo(rx, timeout_in_ms)) return ReadTimeout;
+    if (!readFromRXFifo(rx, uint64_t(timeout_in_ms))) return ReadTimeout;
 
     pid = rx.pid & 0x3f;
     flags = rx.flags;

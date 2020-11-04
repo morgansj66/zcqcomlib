@@ -96,7 +96,7 @@ private:
     bool checkOpen();
     bool waitForTX(std::unique_lock<std::mutex>& lock, int timeout_in_ms);
     bool resetAutoBaud();
-    bool readFromRXFifo(ZenoLINMessage& rx, int timeout_in_ms);
+    bool readFromRXFifo(ZenoLINMessage& rx, uint64_t timeout_in_ms);
 
     int channel_index;
     int display_index;

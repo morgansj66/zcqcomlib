@@ -159,7 +159,39 @@ canStatus CANLIBAPI canSetBusParams (const CanHandle handle,
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
-    bool r = can_channel->setBusParameters(freq,70,sjw);
+    int bitrate;
+    switch(freq) {
+    case canBITRATE_1M:
+        bitrate = 1000000;
+        break;
+    case canBITRATE_500K:
+        bitrate = 500000;
+        break;
+    case canBITRATE_250K:
+        bitrate = 250000;
+        break;
+    case canBITRATE_125K:
+        bitrate = 125000;
+        break;
+    case canBITRATE_100K:
+        bitrate = 100000;
+        break;
+    case canBITRATE_62K:
+        bitrate = 62000;
+        break;
+    case canBITRATE_50K:
+        bitrate = 50000;
+        break;
+    case canBITRATE_83K:
+        bitrate = 83000;
+        break;
+    case canBITRATE_10K:
+        bitrate = 10000;
+        break;
+    default:
+        return canERR_PARAM;
+    }
+    bool r = can_channel->setBusParameters(bitrate,70,sjw);
     if (!r) return canERR_INTERNAL;
 
     return canOK;
@@ -244,13 +276,45 @@ canStatus CANLIBAPI canWrite (const CanHandle handle,
                               long id,
                               void *msg,
                               unsigned int dlc,
-                              unsigned int flag)
+                              unsigned int flags)
 {
-    return canERR_NOT_IMPLEMENTED;
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    ZCANChannel::SendResult r;
+    r = can_channel->send(static_cast<const uint32_t>(id),
+                          static_cast<uint8_t*>(msg),
+                          static_cast<uint8_t>(dlc),
+                          flags, 0);
+
+    canStatus status;
+    switch(r) {
+    case ZCANChannel::SendStatusOK:
+        status = canOK;
+        break;
+    case ZCANChannel::SendTimeout:
+        status = canERR_TIMEOUT;
+        break;
+    case ZCANChannel::TransmitBufferOveflow:
+        status = canERR_TXBUFOFL;
+        break;
+    case ZCANChannel::SendInvalidParam:
+        status = canERR_PARAM;
+        break;
+    case ZCANChannel::SendError:
+        status = canERR_INTERNAL;
+        break;
+    }
+
+    return status;
 }
 
-canStatus CANLIBAPI canWriteSync (const CanHandle handle, unsigned long timeout)
+canStatus CANLIBAPI canWriteSync (const CanHandle handle,
+                                  unsigned long timeout)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -258,32 +322,65 @@ canStatus CANLIBAPI canRead (const CanHandle handle,
                              long *id,
                              void *msg,
                              unsigned int *dlc,
-                             unsigned int *flag,
+                             unsigned int *flags,
                              unsigned long *time)
 {
-    return canERR_NOT_IMPLEMENTED;
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    ZCANChannel::ReadResult r;
+    r = can_channel->readWait(reinterpret_cast<uint32_t&>(*id),
+                              reinterpret_cast<uint8_t*>(msg),
+                              reinterpret_cast<uint8_t&>(*dlc),
+                              *flags, *time, 0);
+    if ( r != ZCANChannel::ReadStatusOK ) {
+        if ( r == ZCANChannel::ReadTimeout ) return canERR_NOMSG;
+        else return canERR_INTERNAL;
+    }
+
+    return canOK;
 }
 
 canStatus CANLIBAPI canReadWait (const CanHandle handle,
                                  long *id,
                                  void *msg,
                                  unsigned int  *dlc,
-                                 unsigned int  *flag,
+                                 unsigned int  *flags,
                                  unsigned long *time,
                                  unsigned long timeout)
 {
-    return canERR_NOT_IMPLEMENTED;
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    ZCANChannel::ReadResult r;
+    r = can_channel->readWait(reinterpret_cast<uint32_t&>(*id),
+                              reinterpret_cast<uint8_t*>(msg),
+                              reinterpret_cast<uint8_t&>(*dlc),
+                              *flags, *time, timeout);
+    if ( r != ZCANChannel::ReadStatusOK ) {
+        if ( r == ZCANChannel::ReadTimeout ) return canERR_TIMEOUT;
+        else return canERR_INTERNAL;
+    }
+
+    return canOK;
 }
 
 canStatus CANLIBAPI canReadSpecific (const CanHandle handle, long id, void * msg,
                                      unsigned int * dlc, unsigned int * flag,
                                      unsigned long * time)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
-canStatus CANLIBAPI canReadSync (const CanHandle handle, unsigned long timeout)
+canStatus CANLIBAPI canReadSync (const CanHandle handle,
+                                 unsigned long timeout)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -291,6 +388,9 @@ canStatus CANLIBAPI canReadSyncSpecific (const CanHandle handle,
                                          long id,
                                          unsigned long timeout)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -301,6 +401,9 @@ canStatus CANLIBAPI canReadSpecificSkip (const CanHandle handle,
                                          unsigned int * flag,
                                          unsigned long * time)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -309,12 +412,57 @@ canStatus CANLIBAPI canSetNotify (const CanHandle handle,
                                   unsigned int notify_fFlags,
                                   void *tag)
 {
-    return canERR_NOT_IMPLEMENTED;
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    can_channel->setEventCallback([=](const ZCANChannel::EventData& data) {
+        canNotifyData can_notify_data;
+        can_notify_data.tag = tag;
+
+        switch(data.event_type) {
+        case ZCANChannel::RX:
+            can_notify_data.eventType = canEVENT_RX;
+            can_notify_data.info.rx.id = data.d.msg.id;
+            can_notify_data.info.rx.time = data.timetstamp;
+            break;
+
+        case ZCANChannel::TX:
+            can_notify_data.eventType = canEVENT_TX;
+            can_notify_data.info.tx.id = data.d.msg.id;
+            can_notify_data.info.tx.time = data.timetstamp;
+            break;
+
+        case ZCANChannel::Error:
+            can_notify_data.eventType = canEVENT_ERROR;
+            can_notify_data.info.busErr.time = data.timetstamp;
+            break;
+
+        case ZCANChannel::Status:
+            can_notify_data.eventType = canEVENT_STATUS;
+            can_notify_data.info.status.time = data.timetstamp;
+            can_notify_data.info.status.busStatus = data.d.status.bus_status;
+            can_notify_data.info.status.rxErrorCounter = data.d.status.rx_error_count;
+            can_notify_data.info.status.txErrorCounter = data.d.status.tx_error_count;
+            break;
+
+        default:
+            return;
+        }
+
+        callback(&can_notify_data);
+    });
+
+    return canOK;
 }
 
 canStatus CANLIBAPI canGetRawHandle (const CanHandle handle, void *raw_handle_ptr)
 {
-    return canERR_NOT_IMPLEMENTED;
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    raw_handle_ptr = reinterpret_cast<void*>(can_channel);
+
+    return canOK;
 }
 
 canStatus CANLIBAPI canTranslateBaud (long *const freq,
@@ -324,7 +472,77 @@ canStatus CANLIBAPI canTranslateBaud (long *const freq,
                                       unsigned int *const nosamp,
                                       unsigned int *const syncMode)
 {
-    return canERR_NOT_IMPLEMENTED;
+    if (!freq || !tseg1 || !tseg2 || !sjw  || !nosamp) return canERR_PARAM;
+    if (syncMode != NULL) *syncMode = 0;
+    *nosamp = 1;
+
+    switch (*freq) {
+    case 1000000:
+        *tseg1 = 30;
+        *tseg2 = 7;
+        *sjw   = 7;
+        break;
+
+    case 500000:
+        *tseg1 = 62;
+        *tseg2 = 15;
+        *sjw   = 15;
+        break;
+
+    case 250000:
+        *tseg1 = 126;
+        *tseg2 = 31;
+        *sjw   = 31;
+        break;
+
+    case 125000:
+        *tseg1 = 254;
+        *tseg2 = 63;
+        *sjw   = 63;
+        break;
+
+    case 100000:
+        *tseg1 = 16;
+        *tseg2 = 7;
+        *sjw   = 0;
+        break;
+
+    case 83333:
+    case 83000:
+        *tseg1 = 16;
+        *tseg2 = 6;
+        *sjw   = 0;
+        break;
+
+    case 62000:
+        *tseg1 = 15;
+        *tseg2 = 6;
+        *sjw   = 3;
+        break;
+
+    case 50000:
+        *tseg1 = 16;
+        *tseg2 = 7;
+        *sjw   = 0;
+        break;
+
+    case 33333:
+        *tseg1 = 16;
+        *tseg2 = 7;
+        *sjw   = 0;
+        break;
+
+    case 10000:
+        *tseg1 = 16;
+        *tseg2 = 7;
+        *sjw   = 0;
+        break;
+
+    default:
+        return canERR_PARAM;
+    }
+
+    return canOK;
 }
 
 canStatus CANLIBAPI canGetErrorText (canStatus error_code, char *buffer,
@@ -361,7 +579,46 @@ canStatus CANLIBAPI canReadTimer (const CanHandle handle, unsigned long *time)
 
 CanHandle CANLIBAPI canOpenChannel (int channel, int flags)
 {
-    return canERR_NOT_IMPLEMENTED;
+    std::lock_guard<std::mutex> lock(open_close_mutex);
+
+    ZRef<ZCANChannel> can_channel = getCANChannel(channel);
+    if ( can_channel == nullptr ) return canERR_NOTFOUND;
+
+    int handle = canINVALID_HANDLE;
+    for(int i = 0; i < MAX_CANLIB_HANDLES; ++i) {
+        if ( handle_map_list[i] == nullptr ) {
+            handle = i;
+            break;
+        }
+    }
+    if ( handle == canERR_INVHANDLE ) {
+        return canERR_NOHANDLES;
+    }
+
+    int capabilities = can_channel->getCapabilites();
+
+    if ( (flags & canOPEN_REQUIRE_EXTENDED) &&
+        !(capabilities & ZCANChannel::ExtendedCAN) ) {
+        return canERR_NO_ACCESS;
+    }
+
+    int _flags = 0;
+
+    if ( flags & canOPEN_CAN_FD ) {
+        _flags |= ZCANChannel::CanFD;
+    }
+
+    if ( flags & canOPEN_CAN_FD_NONISO ) {
+        _flags |= ZCANChannel::CanFD | ZCANChannel::CanFDNonISO;
+    }
+
+    if (!can_channel->open(_flags)) {
+        return canERR_INTERNAL;
+    }
+
+    handle_map_list[handle] = can_channel;
+
+    return handle;
 }
 
 canStatus CANLIBAPI canGetNumberOfChannels (int *channel_count)

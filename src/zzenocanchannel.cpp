@@ -170,6 +170,7 @@ bool ZZenoCANChannel::close()
         zCritical("(ZenoUSB) Ch%d failed to close Zeno CAN channel: %s", channel_index+1, last_error_text.c_str());
     }
 
+    event_callback = std::function<void(EventData)>();
     is_canfd_mode = false;
     current_bitrate = 0;
     usb_can_device->close();
@@ -558,11 +559,17 @@ bool ZZenoCANChannel::readFromRXFifo(ZZenoCANChannel::FifoRxCANMessage& rx,
 {
     std::unique_lock<std::mutex> lock(rx_message_fifo_mutex);
 
+    zDebug("rx_message_fifo.isEmpty() %d - %d", rx_message_fifo.isEmpty(), timeout_in_ms);
     if ( rx_message_fifo.isEmpty()) {
-        std::chrono::milliseconds timeout(timeout_in_ms);
+        if ( timeout_in_ms != -1) {
+            std::chrono::milliseconds timeout(timeout_in_ms);
 
-        /* Wait for RX FIFO */
-        rx_message_fifo_cond.wait_for(lock,timeout);
+            /* Wait for RX FIFO */
+            rx_message_fifo_cond.wait_for(lock,timeout);
+        } else {
+            /* Infinite wait */
+            rx_message_fifo_cond.wait(lock);
+        }
 
         /* If RX FIFO is still empty */
         if ( rx_message_fifo.isEmpty() ) {
@@ -572,7 +579,37 @@ bool ZZenoCANChannel::readFromRXFifo(ZZenoCANChannel::FifoRxCANMessage& rx,
     }
 
     rx = rx_message_fifo.read();
-    return false;
+    return true;
+}
+
+void ZZenoCANChannel::dispatchRXEvent(ZZenoCANChannel::FifoRxCANMessage* rx_message)
+{
+    if (!event_callback) return;
+
+    EventData d;
+    d.event_type = RX;
+    d.timetstamp = rx_message->timestamp;
+    d.d.msg.id = rx_message->id;
+    d.d.msg.dlc = rx_message->dlc;
+    d.d.msg.flags = rx_message->flags;
+    memcpy(d.d.msg.msg,rx_message->data,std::min(int(rx_message->dlc),64));
+
+    event_callback(d);
+}
+
+void ZZenoCANChannel::dispatchTXEvent(ZZenoCANChannel::FifoRxCANMessage* tx_message)
+{
+    if (!event_callback) return;
+
+    EventData d;
+    d.event_type = TX;
+    d.timetstamp = tx_message->timestamp;
+    d.d.msg.id = tx_message->id;
+    d.d.msg.dlc = tx_message->dlc;
+    d.d.msg.flags = tx_message->flags;
+    memcpy(d.d.msg.msg,tx_message->data,std::min(int(tx_message->dlc),64));
+
+    event_callback(d);
 }
 
 
@@ -695,6 +732,12 @@ ZCANFlags::SendResult ZZenoCANChannel::send(const uint32_t id,
     tx_message_fifo.write();
 
     return SendStatusOK;
+}
+
+void ZZenoCANChannel::setEventCallback(std::function<void(const EventData&)> callback)
+{
+    if (!checkOpen()) return;
+    event_callback = callback;
 }
 
 ZCANFlags::SendResult ZZenoCANChannel::sendFD(const uint32_t id,
@@ -883,6 +926,7 @@ void ZZenoCANChannel::queueMessage(ZenoCAN20Message& message)
     memcpy(rx_message->data, message.data,8);
 
     rx_message_fifo.write();
+    dispatchRXEvent(rx_message);
 }
 
 void ZZenoCANChannel::queueMessageCANFDP1(ZenoCANFDMessageP1 &message_p1)
@@ -905,6 +949,7 @@ void ZZenoCANChannel::queueMessageCANFDP1(ZenoCANFDMessageP1 &message_p1)
         memcpy(rx_message->data, message_p1.data, message_p1.dlc);
 
         rx_message_fifo.write();
+        dispatchRXEvent(rx_message);
     }
     else {
         canfd_msg_p1 = message_p1;
@@ -932,6 +977,7 @@ void ZZenoCANChannel::queueMessageCANFDP2(ZenoCANFDMessageP2 &message_p2)
         memcpy(rx_message->data,      canfd_msg_p1.data, 18);
         memcpy(rx_message->data + 18, message_p2.data,   canfd_msg_p1.dlc - 18);
         rx_message_fifo.write();
+        dispatchRXEvent(rx_message);
     }
     else {
         canfd_msg_p2 = message_p2;
@@ -969,6 +1015,7 @@ void ZZenoCANChannel::queueMessageCANFDP3(ZenoCANFDMessageP3 &message_p3)
     memcpy(rx_message->data + 46, message_p3.data,   canfd_msg_p1.dlc - 46);
 
     rx_message_fifo.write();
+    dispatchRXEvent(rx_message);
 
     memset(&canfd_msg_p1, 0 , sizeof(canfd_msg_p1));
     memset(&canfd_msg_p2, 0 , sizeof(canfd_msg_p2));
@@ -1017,8 +1064,9 @@ void ZZenoCANChannel::txAck(ZenoTxCANRequestAck& tx_ack)
             rx_message_fifo.write(message);
             rx_message_fifo_cond.notify_one();
 
-            rx_message_fifo_mutex.unlock();
+            dispatchTXEvent(&message);
 
+            rx_message_fifo_mutex.unlock();
             return;
         }
 

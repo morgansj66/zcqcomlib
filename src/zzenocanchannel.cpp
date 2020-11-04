@@ -559,7 +559,6 @@ bool ZZenoCANChannel::readFromRXFifo(ZZenoCANChannel::FifoRxCANMessage& rx,
 {
     std::unique_lock<std::mutex> lock(rx_message_fifo_mutex);
 
-    zDebug("rx_message_fifo.isEmpty() %d - %d", rx_message_fifo.isEmpty(), timeout_in_ms);
     if ( rx_message_fifo.isEmpty()) {
         if ( timeout_in_ms != -1) {
             std::chrono::milliseconds timeout(timeout_in_ms);

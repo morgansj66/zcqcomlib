@@ -353,10 +353,12 @@ canStatus CANLIBAPI canReadWait (const CanHandle handle,
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
     ZCANChannel::ReadResult r;
+    uint8_t __dlc;
+    *id = 0;
     r = can_channel->readWait(reinterpret_cast<uint32_t&>(*id),
                               reinterpret_cast<uint8_t*>(msg),
-                              reinterpret_cast<uint8_t&>(*dlc),
-                              *flags, *time, timeout);
+                              __dlc, *flags, *time, timeout);
+    *dlc = __dlc;
     if ( r != ZCANChannel::ReadStatusOK ) {
         if ( r == ZCANChannel::ReadTimeout ) return canERR_TIMEOUT;
         else return canERR_INTERNAL;

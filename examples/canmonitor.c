@@ -48,9 +48,12 @@
 #include <stdio.h>
 #include <signal.h>
 #include <errno.h>
-#include <unistd.h>
 #include <time.h>
 #include "vcanevt.h"
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 #define READ_WAIT_INFINITE    (unsigned long)(-1)
 
@@ -205,7 +208,7 @@ ErrorExit:
 
   stat = canBusOff(hnd);
   check("canBusOff", stat);
-  usleep(50*1000); // Sleep just to get the last notification.
+  // usleep(50*1000); // Sleep just to get the last notification.
   stat = canClose(hnd);
   check("canClose", stat);
   stat = canUnloadLibrary();

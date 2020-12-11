@@ -48,7 +48,9 @@
 #include <stdio.h>
 #include <signal.h>
 #include <errno.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #define ALARM_INTERVAL_IN_S   (1)
 #define READ_WAIT_INFINITE    (unsigned long)(-1)
@@ -71,6 +73,7 @@ static void printUsageAndExit(char *prgName)
   exit(1);
 }
 
+#if 0
 static void sighand(int sig)
 {
   static unsigned int last;
@@ -87,6 +90,7 @@ static void sighand(int sig)
     break;
   }
 }
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -109,12 +113,14 @@ int main(int argc, char *argv[])
 
   printf("Reading messages on channel %d\n", channel);
 
+#if 0
   /* Use sighand as our signal handler */
   signal(SIGALRM, sighand);
   signal(SIGINT, sighand);
 
   /* Allow signals to interrupt syscalls */
   siginterrupt(SIGINT, 1);
+#endif
 
   canInitializeLibrary();
 
@@ -142,7 +148,7 @@ int main(int argc, char *argv[])
     goto ErrorExit;
   }
 
-  alarm(ALARM_INTERVAL_IN_S);
+  // alarm(ALARM_INTERVAL_IN_S);
 
   do {
     long id;
@@ -207,11 +213,13 @@ int main(int argc, char *argv[])
 
   } while (stat == canOK);
 
+#if 0
   sighand(SIGALRM);
+#endif
 
 ErrorExit:
 
-  alarm(0);
+  // alarm(0);
   stat = canBusOff(hnd);
   check("canBusOff", stat);
   stat = canClose(hnd);

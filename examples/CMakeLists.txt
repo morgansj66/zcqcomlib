@@ -8,8 +8,11 @@ set(CMAKE_CXX_STANDARD 14)
 
 # I../includes
 include_directories(include)
+
 add_executable (listChannels listChannels.c)
 target_link_libraries(listChannels zcqcomlib)
+# set_target_properties(listChannels PROPERTIES LINK_FLAGS /SUBSYSTEM:WINDOWS)
+
 add_executable (canmonitor canmonitor.c)
 target_link_libraries(canmonitor zcqcomlib)
 add_executable (canfdmonitor canfdmonitor.c)

@@ -40,7 +40,7 @@
 #define ZFUNC_INFO __PRETTY_FUNCTION__
 #elif defined(__clang__)
 #define ZFUNC_INFO __PRETTY_FUNCTION__
-#elfi defined(_MSC_VER)
+#elif defined(_MSC_VER)
 #define ZFUNC_INFO __FUNCDNAME__
 #else
 #endif

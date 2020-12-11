@@ -35,8 +35,19 @@
 #include "zzenolindriver.h"
 #include "zenocan.h"
 #include "zdebug.h"
-#include <string.h>
+#include <cstring>
 #include <algorithm>
+
+#ifdef _WIN32
+  /* some bloody #define of min conflicts with C++ std::min and std::max */
+  #ifdef min
+    #undef min
+  #endif
+  #ifdef max
+    #undef max
+  #endif
+#endif
+
 
 /*** ---------------------------==*+*+*==---------------------------------- ***/
 uint8_t linCalculatePIDParity(uint8_t pid)

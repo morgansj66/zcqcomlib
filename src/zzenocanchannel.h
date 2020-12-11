@@ -113,7 +113,7 @@ private:
     int tx_request_count;
     int tx_next_trans_id;
     // int tx_request_received;
-    uint max_outstanding_tx_requests;
+    unsigned int max_outstanding_tx_requests;
 
     struct FifoRxCANMessage {
         uint64_t timestamp;
@@ -153,7 +153,7 @@ private:
     uint32_t serial_number;
 
     // std::mutex timer_adjust_mutex;
-    uint base_clock_divisor;
+    unsigned int base_clock_divisor;
 
     std::function<void(const EventData&)> event_callback;
 

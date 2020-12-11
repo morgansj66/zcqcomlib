@@ -34,8 +34,9 @@
 #define ZRING_H
 
 #include "zglobal.h"
-#include <assert.h>
 #include <algorithm>
+#include <cstdint>
+#include <cassert>
 
 template<class T>
 class ZRing {
@@ -122,7 +123,7 @@ public:
         return (read_pos == write_pos);
     }
 
-    uint count() const {
+    unsigned int count() const {
         if ( write_pos >= read_pos ) {
             return write_pos - read_pos;
         }
@@ -131,11 +132,11 @@ public:
         }
     }
 
-    uint available() const {
+    unsigned int available() const {
         return size - count() - 1;
     }
 
-    uint bufferSize() const {
+    unsigned int bufferSize() const {
         return size;
     }
 
@@ -148,13 +149,13 @@ public:
 
     void clear()
     {
-        for ( uint i = 0 ; i < size; ++i ) {
+        for ( unsigned int i = 0 ; i < size; ++i ) {
             ring[i] = T();
         }
         read_pos = write_pos = 0;
     }
 private:
-    uint size;
+    unsigned int size;
     T* ring;
     int read_pos;
     int write_pos;

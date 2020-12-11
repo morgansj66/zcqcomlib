@@ -165,8 +165,8 @@ protected:
     /* Card info */
     uint8_t next_transaction_id;
     int zeno_clock_resolution;
-    uint serial_number;
-    uint fw_version;
+    uint32_t serial_number;
+    uint32_t fw_version;
 
     /* Clock info */
     uint64_t t2_clock_start_ref_in_us;

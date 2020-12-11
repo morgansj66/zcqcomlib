@@ -418,6 +418,12 @@ typedef struct canNotifyData {
 // (canlib.c provides its own definitions of CANLIBAPI, DLLIMPORT
 // and DLLEXPORT before including this file.)
 //
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+#ifndef CANLIBAPI
+#   define CANLIBAPI __declspec(dllimport)
+#endif /* CANLIBAPI */
+#endif
+
 #ifndef CANLIBAPI
 #   define CANLIBAPI
 #endif /* CANLIBAPI */
@@ -3866,7 +3872,7 @@ kvStatus CANLIBAPI kvTimeDomainRemoveHandle (kvTimeDomain domain,
  *  \ref canEVENT_xxx codes that the \ref canSetNotify() API is using.
  *
  */
-typedef void (CANLIBAPI *kvCallback_t) (CanHandle hnd, void* context, unsigned int notifyEvent);
+typedef void (*kvCallback_t) (CanHandle hnd, void* context, unsigned int notifyEvent);
 
 /**
  * \ingroup can_general

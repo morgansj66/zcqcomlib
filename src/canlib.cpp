@@ -30,14 +30,17 @@
  *
  */
 
+#include "zglobal.h"
+#ifdef Z_OS_WINDOWS
+#define CANLIBAPI ZDECL_EXPORT
+#endif
+
 #include "canlib.h"
 #include "zcqcore.h"
 #include "zcanchannel.h"
 #include "zdebug.h"
 #include <string.h>
 #include <mutex>
-
-#pragma GCC diagnostic ignored "-Wunused-parameter"
 
 /*** ---------------------------==*+*+*==---------------------------------- ***/
 #define CANLIB_PRODUCT_MAJOR_VERSION (8 - 3)
@@ -156,6 +159,11 @@ canStatus CANLIBAPI canSetBusParams (const CanHandle handle,
                                      unsigned int no_samp,
                                      unsigned int syncmode)
 {
+    ZUNUSED(tseg1)
+    ZUNUSED(tseg2)
+    ZUNUSED(no_samp)
+    ZUNUSED(syncmode)
+
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
@@ -191,7 +199,7 @@ canStatus CANLIBAPI canSetBusParams (const CanHandle handle,
     default:
         return canERR_PARAM;
     }
-    bool r = can_channel->setBusParameters(bitrate,70,sjw);
+    bool r = can_channel->setBusParameters(bitrate,70,int(sjw));
     if (!r) return canERR_INTERNAL;
 
     return canOK;
@@ -203,10 +211,14 @@ canStatus CANLIBAPI canSetBusParamsFd(const CanHandle handle,
                                       unsigned int tseg2_brs,
                                       unsigned int sjw_brs)
 {
+    ZUNUSED(freq_brs)
+    ZUNUSED(tseg1_brs)
+    ZUNUSED(tseg2_brs)
+
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
-    bool r = can_channel->setBusParametersFd(freq_brs,70,sjw_brs);
+    bool r = can_channel->setBusParametersFd(freq_brs,70,int(sjw_brs));
     if (!r) return canERR_INTERNAL;
 
     return canOK;
@@ -220,6 +232,13 @@ canStatus CANLIBAPI canGetBusParams (const CanHandle handle,
                                      unsigned int *noSamp,
                                      unsigned int *syncmode)
 {
+    ZUNUSED(freq)
+    ZUNUSED(tseg1)
+    ZUNUSED(tseg2)
+    ZUNUSED(sjw)
+    ZUNUSED(noSamp)
+    ZUNUSED(syncmode)
+
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
@@ -232,6 +251,11 @@ canStatus CANLIBAPI canGetBusParamsFd(const CanHandle handle,
                                       unsigned int *tseg2_brs,
                                       unsigned int *sjw_brs)
 {
+    ZUNUSED(freq_brs)
+    ZUNUSED(tseg1_brs)
+    ZUNUSED(tseg2_brs)
+    ZUNUSED(sjw_brs)
+
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
@@ -241,6 +265,11 @@ canStatus CANLIBAPI canGetBusParamsFd(const CanHandle handle,
 canStatus CANLIBAPI canSetBusOutputControl (const CanHandle handle,
                                             const unsigned int drivertype)
 {
+    ZUNUSED(drivertype)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -248,27 +277,50 @@ canStatus CANLIBAPI canSetBusOutputControl (const CanHandle handle,
 canStatus CANLIBAPI canGetBusOutputControl (const CanHandle handle,
                                             unsigned int *drivertype)
 {
+    ZUNUSED(drivertype)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canAccept (const CanHandle handle,
                                const long envelope,
-                               const unsigned int flag)
+                               const unsigned int flags)
 {
+    ZUNUSED(envelope)
+    ZUNUSED(flags)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canReadStatus (const CanHandle handle,
                                    unsigned long *const flags)
 {
+    ZUNUSED(flags)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canReadErrorCounters (const CanHandle handle,
-                                          unsigned int *txErr,
-                                          unsigned int *rxErr,
-                                          unsigned int *ovErr)
+                                          unsigned int *tx_err,
+                                          unsigned int *rx_err,
+                                          unsigned int *ov_err)
 {
+    ZUNUSED(tx_err)
+    ZUNUSED(rx_err)
+    ZUNUSED(ov_err)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -312,6 +364,8 @@ canStatus CANLIBAPI canWrite (const CanHandle handle,
 canStatus CANLIBAPI canWriteSync (const CanHandle handle,
                                   unsigned long timeout)
 {
+    ZUNUSED(timeout)
+
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
@@ -328,15 +382,18 @@ canStatus CANLIBAPI canRead (const CanHandle handle,
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
+    uint64_t __time;
     ZCANChannel::ReadResult r;
     r = can_channel->readWait(reinterpret_cast<uint32_t&>(*id),
                               reinterpret_cast<uint8_t*>(msg),
                               reinterpret_cast<uint8_t&>(*dlc),
-                              *flags, *time, 0);
+                              *flags, __time, 0);
     if ( r != ZCANChannel::ReadStatusOK ) {
         if ( r == ZCANChannel::ReadTimeout ) return canERR_NOMSG;
         else return canERR_INTERNAL;
     }
+
+    *time = static_cast<unsigned long>(__time);
 
     return canOK;
 }
@@ -353,12 +410,15 @@ canStatus CANLIBAPI canReadWait (const CanHandle handle,
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
     ZCANChannel::ReadResult r;
+    uint64_t __time;
     uint8_t __dlc;
     *id = 0;
     r = can_channel->readWait(reinterpret_cast<uint32_t&>(*id),
                               reinterpret_cast<uint8_t*>(msg),
-                              __dlc, *flags, *time, timeout);
+                              __dlc, *flags, __time, int(timeout));
     *dlc = __dlc;
+    *time = static_cast<unsigned long>(__time);
+
     if ( r != ZCANChannel::ReadStatusOK ) {
         if ( r == ZCANChannel::ReadTimeout ) return canERR_TIMEOUT;
         else return canERR_INTERNAL;
@@ -371,6 +431,12 @@ canStatus CANLIBAPI canReadSpecific (const CanHandle handle, long id, void * msg
                                      unsigned int * dlc, unsigned int * flag,
                                      unsigned long * time)
 {
+    ZUNUSED(id)
+    ZUNUSED(msg)
+    ZUNUSED(dlc)
+    ZUNUSED(flag)
+    ZUNUSED(time)
+
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
@@ -380,6 +446,8 @@ canStatus CANLIBAPI canReadSpecific (const CanHandle handle, long id, void * msg
 canStatus CANLIBAPI canReadSync (const CanHandle handle,
                                  unsigned long timeout)
 {
+    ZUNUSED(timeout)
+
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
@@ -390,6 +458,9 @@ canStatus CANLIBAPI canReadSyncSpecific (const CanHandle handle,
                                          long id,
                                          unsigned long timeout)
 {
+    ZUNUSED(id)
+    ZUNUSED(timeout)
+
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
@@ -403,6 +474,12 @@ canStatus CANLIBAPI canReadSpecificSkip (const CanHandle handle,
                                          unsigned int * flag,
                                          unsigned long * time)
 {
+    ZUNUSED(id)
+    ZUNUSED(msg)
+    ZUNUSED(dlc)
+    ZUNUSED(flag)
+    ZUNUSED(time)
+
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
 
@@ -414,8 +491,15 @@ canStatus CANLIBAPI canSetNotify (const CanHandle handle,
                                   unsigned int notify_fFlags,
                                   void *tag)
 {
+    ZUNUSED(notify_fFlags)
+
     auto can_channel = getChannel(handle);
     if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    if ( callback == nullptr ) {
+        can_channel->setEventCallback(std::function<void(const ZCANChannel::EventData&)>());
+        return canOK;
+    }
 
     can_channel->setEventCallback([=](const ZCANChannel::EventData& data) {
         canNotifyData can_notify_data;
@@ -424,27 +508,27 @@ canStatus CANLIBAPI canSetNotify (const CanHandle handle,
         switch(data.event_type) {
         case ZCANChannel::RX:
             can_notify_data.eventType = canEVENT_RX;
-            can_notify_data.info.rx.id = data.d.msg.id;
-            can_notify_data.info.rx.time = data.timetstamp;
+            can_notify_data.info.rx.id = long(data.d.msg.id);
+            can_notify_data.info.rx.time = static_cast<unsigned long>(data.timetstamp);
             break;
 
         case ZCANChannel::TX:
             can_notify_data.eventType = canEVENT_TX;
-            can_notify_data.info.tx.id = data.d.msg.id;
-            can_notify_data.info.tx.time = data.timetstamp;
+            can_notify_data.info.tx.id = long(data.d.msg.id);
+            can_notify_data.info.tx.time = static_cast<unsigned long>(data.timetstamp);
             break;
 
         case ZCANChannel::Error:
             can_notify_data.eventType = canEVENT_ERROR;
-            can_notify_data.info.busErr.time = data.timetstamp;
+            can_notify_data.info.busErr.time = static_cast<unsigned long>(data.timetstamp);
             break;
 
         case ZCANChannel::Status:
             can_notify_data.eventType = canEVENT_STATUS;
-            can_notify_data.info.status.time = data.timetstamp;
+            can_notify_data.info.status.time = static_cast<unsigned long>(data.timetstamp);
             can_notify_data.info.status.busStatus = data.d.status.bus_status;
-            can_notify_data.info.status.rxErrorCounter = data.d.status.rx_error_count;
-            can_notify_data.info.status.txErrorCounter = data.d.status.tx_error_count;
+            can_notify_data.info.status.rxErrorCounter = static_cast<unsigned char>(data.d.status.rx_error_count);
+            can_notify_data.info.status.txErrorCounter = static_cast<unsigned char>(data.d.status.tx_error_count);
             break;
 
         default:
@@ -472,10 +556,10 @@ canStatus CANLIBAPI canTranslateBaud (long *const freq,
                                       unsigned int *const tseg2,
                                       unsigned int *const sjw,
                                       unsigned int *const nosamp,
-                                      unsigned int *const syncMode)
+                                      unsigned int *const sync_mode)
 {
     if (!freq || !tseg1 || !tseg2 || !sjw  || !nosamp) return canERR_PARAM;
-    if (syncMode != NULL) *syncMode = 0;
+    if (sync_mode != nullptr) *sync_mode = 0;
     *nosamp = 1;
 
     switch (*freq) {
@@ -553,7 +637,7 @@ canStatus CANLIBAPI canGetErrorText (canStatus error_code, char *buffer,
     unsigned int error_code_index;
     if (!buffer || buffer_size == 0) return canERR_PARAM;
 
-    error_code_index = -error_code;
+    error_code_index = static_cast<unsigned int>(-error_code);
     if (error_code_index >= sizeof(canlib_error_text_list) / sizeof(const char *)) return canERR_PARAM;
 
     strncpy(buffer, canlib_error_text_list[error_code_index], buffer_size);
@@ -571,11 +655,23 @@ canStatus CANLIBAPI canIoCtl (const CanHandle handle,
                               void *buf,
                               unsigned int buflen)
 {
+    ZUNUSED(func)
+    ZUNUSED(buf)
+    ZUNUSED(buflen)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canReadTimer (const CanHandle handle, unsigned long *time)
 {
+    ZUNUSED(time)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -597,7 +693,7 @@ CanHandle CANLIBAPI canOpenChannel (int channel, int flags)
         return canERR_NOHANDLES;
     }
 
-    int capabilities = can_channel->getCapabilites();
+    uint32_t capabilities = can_channel->getCapabilites();
 
     if ( (flags & canOPEN_REQUIRE_EXTENDED) &&
         !(capabilities & ZCANChannel::ExtendedCAN) ) {
@@ -716,7 +812,7 @@ canStatus CANLIBAPI canGetChannelData (int channel,
     }
 
     case canCHANNELDATA_DLL_PRODUCT_VERSION: {
-        unsigned short *p = (unsigned short *)buffer;
+        unsigned short *p = static_cast<unsigned short *>(buffer);
         if (buffer_size < 8) return canERR_PARAM;
         *p++ = 0;
         *p++ = 0;
@@ -744,26 +840,45 @@ canStatus CANLIBAPI canGetChannelData (int channel,
     case canCHANNELDATA_REMOTE_HOST_NAME:
     case canCHANNELDATA_REMOTE_MAC:
       return canERR_NOT_IMPLEMENTED;
-
-    default:
-      return canERR_NOT_IMPLEMENTED;
     }
 
     return canERR_NOT_IMPLEMENTED;
 }
 
-canStatus CANLIBAPI canSetBusParamsC200 (const CanHandle handle, unsigned char btr0, unsigned char btr1)
+canStatus CANLIBAPI canSetBusParamsC200 (const CanHandle handle,
+                                         unsigned char btr0,
+                                         unsigned char btr1)
 {
+    ZUNUSED(btr0)
+    ZUNUSED(btr1)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
-canStatus CANLIBAPI canSetDriverMode (const CanHandle handle, int lineMode, int resNet)
+canStatus CANLIBAPI canSetDriverMode (const CanHandle handle,
+                                      int line_mode, int res_net)
 {
+    ZUNUSED(line_mode)
+    ZUNUSED(res_net)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
-canStatus CANLIBAPI canGetDriverMode (const CanHandle handle, int *lineMode, int *resNet)
+canStatus CANLIBAPI canGetDriverMode (const CanHandle handle,
+                                      int *line_mode, int *res_net)
 {
+    ZUNUSED(line_mode)
+    ZUNUSED(res_net)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -783,8 +898,8 @@ unsigned int CANLIBAPI canGetVersionEx (unsigned int item_code)
     case canVERSION_CANLIB32_BETA:
         return 0;
 
-    default:
-        return 0;
+    // default:
+    //    return 0;
     }
 
     return canOK;
@@ -792,16 +907,29 @@ unsigned int CANLIBAPI canGetVersionEx (unsigned int item_code)
 
 canStatus CANLIBAPI canObjBufFreeAll (const CanHandle handle)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canObjBufAllocate (const CanHandle handle, int type)
 {
+    ZUNUSED(type)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canObjBufFree (const CanHandle handle, int idx)
 {
+    ZUNUSED(idx)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -812,6 +940,15 @@ canStatus CANLIBAPI canObjBufWrite (const CanHandle handle,
                                     unsigned int dlc,
                                     unsigned int flags)
 {
+    ZUNUSED(idx)
+    ZUNUSED(id)
+    ZUNUSED(msg)
+    ZUNUSED(dlc)
+    ZUNUSED(flags)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -820,6 +957,13 @@ canStatus CANLIBAPI canObjBufSetFilter (const CanHandle handle,
                                         unsigned int code,
                                         unsigned int mask)
 {
+    ZUNUSED(idx)
+    ZUNUSED(code)
+    ZUNUSED(mask)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -827,6 +971,12 @@ canStatus CANLIBAPI canObjBufSetFlags (const CanHandle handle,
                                        int idx,
                                        unsigned int flags)
 {
+    ZUNUSED(idx)
+    ZUNUSED(flags)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -834,6 +984,12 @@ canStatus CANLIBAPI canObjBufSetPeriod (const CanHandle handle,
                                         int idx,
                                         unsigned int period)
 {
+    ZUNUSED(idx)
+    ZUNUSED(period)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -841,16 +997,32 @@ canStatus CANLIBAPI canObjBufSetMsgCount (const CanHandle handle,
                                           int idx,
                                           unsigned int count)
 {
+    ZUNUSED(idx)
+    ZUNUSED(count)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canObjBufEnable (const CanHandle handle, int idx)
 {
+    ZUNUSED(idx)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canObjBufDisable (const CanHandle handle, int idx)
 {
+    ZUNUSED(idx)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -858,11 +1030,20 @@ canStatus CANLIBAPI canObjBufSendBurst (const CanHandle handle,
                                         int idx,
                                         unsigned int burstlen)
 {
+    ZUNUSED(idx)
+    ZUNUSED(burstlen)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canResetBus (const CanHandle handle)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -870,10 +1051,38 @@ canStatus CANLIBAPI canWriteWait (const CanHandle handle,
                                   long id,
                                   void *msg,
                                   unsigned int dlc,
-                                  unsigned int flag,
+                                  unsigned int flags,
                                   unsigned long timeout)
 {
-    return canERR_NOT_IMPLEMENTED;
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
+    ZCANChannel::SendResult r;
+    r = can_channel->send(static_cast<const uint32_t>(id),
+                          static_cast<uint8_t*>(msg),
+                          static_cast<uint8_t>(dlc),
+                          flags, int(timeout));
+
+    canStatus status;
+    switch(r) {
+    case ZCANChannel::SendStatusOK:
+        status = canOK;
+        break;
+    case ZCANChannel::SendTimeout:
+        status = canERR_TIMEOUT;
+        break;
+    case ZCANChannel::TransmitBufferOveflow:
+        status = canERR_TXBUFOFL;
+        break;
+    case ZCANChannel::SendInvalidParam:
+        status = canERR_PARAM;
+        break;
+    case ZCANChannel::SendError:
+        status = canERR_INTERNAL;
+        break;
+    }
+
+    return status;
 }
 
 canStatus CANLIBAPI canUnloadLibrary (void)
@@ -887,31 +1096,56 @@ canStatus CANLIBAPI canSetAcceptanceFilter (const CanHandle handle,
                                             unsigned int mask,
                                             int is_extended)
 {
+    ZUNUSED(code)
+    ZUNUSED(mask)
+    ZUNUSED(is_extended)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canFlushReceiveQueue (const CanHandle handle)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canFlushTransmitQueue (const CanHandle handle)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvFlashLeds (const CanHandle handle, int action, int timeout)
 {
+    ZUNUSED(action)
+    ZUNUSED(timeout)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canRequestChipStatus (const CanHandle handle)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI canRequestBusStatistics (const CanHandle handle)
 {
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -919,6 +1153,12 @@ canStatus CANLIBAPI canGetBusStatistics (const CanHandle handle,
                                          canBusStatistics *stat,
                                          size_t bufsiz)
 {
+    ZUNUSED(stat)
+    ZUNUSED(bufsiz)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -927,21 +1167,34 @@ canStatus CANLIBAPI canGetHandleData (const CanHandle handle,
                                       void *buffer,
                                       size_t bufsize)
 {
+    ZUNUSED(item)
+    ZUNUSED(buffer)
+    ZUNUSED(bufsize)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvTimeDomainCreate (kvTimeDomain *domain)
 {
+    ZUNUSED(domain)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvTimeDomainDelete (kvTimeDomain domain)
 {
+    ZUNUSED(domain)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvTimeDomainResetTime (kvTimeDomain domain)
 {
+    ZUNUSED(domain)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -949,26 +1202,47 @@ kvStatus CANLIBAPI kvTimeDomainGetData (kvTimeDomain domain,
                                         kvTimeDomainData *data,
                                         size_t bufsiz)
 {
+    ZUNUSED(domain)
+    ZUNUSED(data)
+    ZUNUSED(bufsiz)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvTimeDomainAddHandle(kvTimeDomain domain,
                                          const CanHandle handle)
 {
+    ZUNUSED(domain)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvTimeDomainRemoveHandle (kvTimeDomain domain,
                                              const CanHandle handle)
 {
+    ZUNUSED(domain)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvSetNotifyCallback (const CanHandle handle,
                                         kvCallback_t callback,
                                         void* context,
-                                        unsigned int notif_fFlags)
+                                        unsigned int notify_fFlags)
 {
+    ZUNUSED(callback)
+    ZUNUSED(context)
+    ZUNUSED(notify_fFlags)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -978,6 +1252,12 @@ kvStatus CANLIBAPI kvGetSupportedInterfaceInfo (int index,
                                                 int *hwType,
                                                 int *hwBusType)
 {
+    ZUNUSED(index)
+    ZUNUSED(hwName)
+    ZUNUSED(nameLen)
+    ZUNUSED(hwType)
+    ZUNUSED(hwBusType)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -987,21 +1267,45 @@ kvStatus CANLIBAPI kvReadDeviceCustomerData (const CanHandle handle,
                                              void *data,
                                              size_t bufsiz)
 {
+    ZUNUSED(userNumber)
+    ZUNUSED(itemNumber)
+    ZUNUSED(data)
+    ZUNUSED(bufsiz)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvScriptStart (const CanHandle handle, int slotNo)
 {
+    ZUNUSED(slotNo)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvScriptStop (const CanHandle handle, int slotNo, int mode)
 {
+    ZUNUSED(slotNo)
+    ZUNUSED(mode)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvScriptUnload (const CanHandle handle, int slotNo)
 {
+    ZUNUSED(slotNo)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -1011,6 +1315,14 @@ kvStatus CANLIBAPI kvScriptSendEvent (const CanHandle handle,
                                       int eventNo,
                                       unsigned int data)
 {
+    ZUNUSED(slotNo)
+    ZUNUSED(eventType)
+    ZUNUSED(eventNo)
+    ZUNUSED(data)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -1019,31 +1331,52 @@ kvEnvHandle CANLIBAPI kvScriptEnvvarOpen (const CanHandle handle,
                                           int *envvarType,
                                           int *envvarSize)
 {
+    ZUNUSED(envvarName)
+    ZUNUSED(envvarType)
+    ZUNUSED(envvarSize)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return -1;
 }
 
 kvStatus CANLIBAPI kvScriptEnvvarClose (kvEnvHandle e_handle)
 {
+    ZUNUSED(e_handle)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvScriptEnvvarSetInt (kvEnvHandle e_handle, int val)
 {
+    ZUNUSED(e_handle)
+    ZUNUSED(val)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvScriptEnvvarGetInt (kvEnvHandle e_handle, int *val)
 {
+    ZUNUSED(e_handle)
+    ZUNUSED(val)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvScriptEnvvarSetFloat (kvEnvHandle e_handle, float val)
 {
+    ZUNUSED(e_handle)
+    ZUNUSED(val)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvScriptEnvvarGetFloat (kvEnvHandle e_handle, float *val)
 {
+    ZUNUSED(e_handle)
+    ZUNUSED(val)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -1052,6 +1385,11 @@ kvStatus CANLIBAPI kvScriptEnvvarSetData (kvEnvHandle e_handle,
                                           int start_index,
                                           int data_len)
 {
+    ZUNUSED(e_handle)
+    ZUNUSED(buf)
+    ZUNUSED(start_index)
+    ZUNUSED(data_len)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -1060,6 +1398,11 @@ kvStatus CANLIBAPI kvScriptEnvvarGetData (kvEnvHandle e_handle,
                                           int start_index,
                                           int data_len)
 {
+    ZUNUSED(e_handle)
+    ZUNUSED(buf)
+    ZUNUSED(start_index)
+    ZUNUSED(data_len)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -1071,6 +1414,12 @@ kvStatus CANLIBAPI kvScriptLoadFile (const CanHandle handle,
                                      int slotNo,
                                      char *filePathOnPC)
 {
+    ZUNUSED(slotNo)
+    ZUNUSED(filePathOnPC)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -1078,11 +1427,20 @@ kvStatus CANLIBAPI kvScriptStatus(const CanHandle handle,
                                   int  slot,
                                   unsigned int *status)
 {
+    ZUNUSED(slot)
+    ZUNUSED(status)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvScriptGetMaxEnvvarSize(int hnd, int *envvarSize)
 {
+    ZUNUSED(hnd)
+    ZUNUSED(envvarSize)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -1091,6 +1449,11 @@ kvStatus CANLIBAPI kvScriptTxeGetData(const char *filePathOnPC,
                                       void *buffer,
                                       unsigned int *bufsize)
 {
+    ZUNUSED(filePathOnPC)
+    ZUNUSED(item)
+    ZUNUSED(buffer)
+    ZUNUSED(bufsize)
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -1098,6 +1461,12 @@ kvStatus CANLIBAPI kvFileCopyToDevice (const CanHandle handle,
                                        char *hostFileName,
                                        char *deviceFileName)
 {
+    ZUNUSED(hostFileName)
+    ZUNUSED(deviceFileName)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -1105,11 +1474,22 @@ kvStatus CANLIBAPI kvFileCopyFromDevice (const CanHandle handle,
                                          char *deviceFileName,
                                          char *hostFileName)
 {
+    ZUNUSED(deviceFileName)
+    ZUNUSED(hostFileName)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvFileDelete (const CanHandle handle, char *deviceFileName)
 {
+    ZUNUSED(deviceFileName)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -1118,11 +1498,23 @@ kvStatus CANLIBAPI kvFileGetName (const CanHandle handle,
                                   char *name,
                                   int namelen)
 {
+    ZUNUSED(fileNo)
+    ZUNUSED(name)
+    ZUNUSED(namelen)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvFileGetCount (const CanHandle handle, int *count)
 {
+    ZUNUSED(count)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
@@ -1130,80 +1522,175 @@ kvStatus CANLIBAPI kvFileGetSystemData (const CanHandle handle,
                                         int itemCode,
                                         int *result)
 {
+    ZUNUSED(itemCode)
+    ZUNUSED(result)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvDeviceSetMode (const CanHandle handle, int mode)
 {
+    ZUNUSED(mode)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvDeviceGetMode (const CanHandle handle, int *result)
 {
+    ZUNUSED(result)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvReadTimer (const CanHandle handle, unsigned int *time)
 {
+    ZUNUSED(time)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 kvStatus CANLIBAPI kvReadTimer64 (const CanHandle handle, uint64_t *time)
 {
+    ZUNUSED(time)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvIoGetNumberOfPins (const CanHandle handle, unsigned int *pinCount)
 {
+    ZUNUSED(pinCount)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvIoPinGetInfo (const CanHandle handle, unsigned int pin, int item, void *buffer, const unsigned int bufsize)
 {
+    ZUNUSED(pin)
+    ZUNUSED(item)
+    ZUNUSED(buffer)
+    ZUNUSED(bufsize)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvIoPinSetInfo (const CanHandle handle, unsigned int pin, int item, const void *buffer, const unsigned int bufsize)
 {
+    ZUNUSED(pin)
+    ZUNUSED(item)
+    ZUNUSED(buffer)
+    ZUNUSED(bufsize)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvIoPinSetDigital (const CanHandle handle, unsigned int pin, unsigned int value)
 {
+    ZUNUSED(pin)
+    ZUNUSED(value)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvIoPinGetDigital (const CanHandle handle, unsigned int pin, unsigned int *value)
 {
+    ZUNUSED(pin)
+    ZUNUSED(value)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvIoPinGetOutputDigital (const CanHandle handle, unsigned int pin, unsigned int *value)
 {
+    ZUNUSED(pin)
+    ZUNUSED(value)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvIoPinSetRelay (const CanHandle handle, unsigned int pin, unsigned int value)
 {
+    ZUNUSED(pin)
+    ZUNUSED(value)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvIoPinGetOutputRelay (const CanHandle handle, unsigned int pin, unsigned int *value)
 {
+    ZUNUSED(pin)
+    ZUNUSED(value)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvIoPinSetAnalog (const CanHandle handle, unsigned int pin, float value)
 {
+    ZUNUSED(pin)
+    ZUNUSED(value)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvIoPinGetAnalog (const CanHandle handle, unsigned int pin, float* value)
 {
+    ZUNUSED(pin)
+    ZUNUSED(value)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }
 
 canStatus CANLIBAPI kvIoPinGetOutputAnalog (const CanHandle handle, unsigned int pin, float* value)
 {
+    ZUNUSED(pin)
+    ZUNUSED(value)
+
+    auto can_channel = getChannel(handle);
+    if ( can_channel == nullptr ) return canERR_INVHANDLE;
+
     return canERR_NOT_IMPLEMENTED;
 }

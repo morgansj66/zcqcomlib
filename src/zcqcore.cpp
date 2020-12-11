@@ -63,12 +63,14 @@ ZCQCore::ZCQCore()
     can_channel_list.shrink_to_fit();
 
     ZRef<ZZenoLINDriver> zeno_lin_driver = zeno_can_driver->getZenoLINDriver();
-    number_of_channels = zeno_lin_driver->getNumberOfChannels();
-    for(int i = 0; i < number_of_channels; ++i) {
-        ZRef<ZLINChannel> lin_channel = zeno_lin_driver->getChannel(i);
-        lin_channel_list.push_back(lin_channel);
+    if ( zeno_lin_driver != nullptr ) {
+        number_of_channels = zeno_lin_driver->getNumberOfChannels();
+        for(int i = 0; i < number_of_channels; ++i) {
+            ZRef<ZLINChannel> lin_channel = zeno_lin_driver->getChannel(i);
+            lin_channel_list.push_back(lin_channel);
+        }
+        lin_channel_list.shrink_to_fit();
     }
-    lin_channel_list.shrink_to_fit();
 }
 
 /*** ---------------------------==*+*+*==---------------------------------- ***/

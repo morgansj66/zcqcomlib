@@ -4,8 +4,27 @@ project(zcqcomlib VERSION 1.0.0 DESCRIPTION "Zeno CANquatro communication librar
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
+if (UNIX)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
+endif (UNIX)
+
+if (WIN32)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+    set(LIBUSB_INCLUDE_DIRS "C:\\proj\\libusb")
+
+    message("build type ${CMAKE_BUILD_TYPE}")
+    IF(CMAKE_BUILD_TYPE MATCHES Debug)
+        message("debug mode")
+        set(LIBUSB_LIBRARIES "C:\\proj\\libusb\\x64\\Debug\\lib\\libusb-1.0.lib")
+    ELSEIF(CMAKE_BUILD_TYPE MATCHES Release)
+        set(LIBUSB_LIBRARIES "C:\\proj\\libusb\\x64\\Release\\lib\\libusb-1.0.lib")
+    ELSE()
+        message("defaulint to release mode")
+        set(LIBUSB_LIBRARIES "C:\\proj\\libusb\\x64\\Release\\lib\\libusb-1.0.lib")
+    ENDIF(CMAKE_BUILD_TYPE MATCHES Debug)
+
+endif (WIN32)
 
 set(SOURCES
   src/canlib.cpp

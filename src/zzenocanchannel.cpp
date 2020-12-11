@@ -37,6 +37,16 @@
 #include <string.h>
 #include <algorithm>
 
+#ifdef _WIN32
+  /* some bloody #define of min conflicts with C++ std::min and std::max */
+  #ifdef min
+    #undef min
+  #endif
+  #ifdef max
+    #undef max
+  #endif
+#endif
+
 ZZenoCANChannel::ZZenoCANChannel(int _channel_index,
                                  ZZenoUSBDevice* _usb_can_device)
     : channel_index(_channel_index),
@@ -147,7 +157,7 @@ bool ZZenoCANChannel::open(int open_flags)
     max_outstanding_tx_requests = reply.max_pending_tx_msgs;
     open_start_ref_timestamp_in_us = uint64_t(reply.clock_start_ref);
     initial_timer_adjustment_done = 0;
-    base_clock_divisor = std::min(uint(reply.base_clock_divisor),1u);
+    base_clock_divisor = std::min(unsigned(reply.base_clock_divisor),1u);
 
     zDebug("Zeno - max outstanding TX: %d Base clock divisor: %d", reply.max_pending_tx_msgs, base_clock_divisor);
 
@@ -650,7 +660,7 @@ ZCANFlags::ReadResult ZZenoCANChannel::readWait(uint32_t& id, uint8_t *msg,
         //TODO: Check flag CanFDESI
     }
 
-    dlc = std::min(uint(rx.dlc),uint(is_canfd_mode ? 64 : 8));
+    dlc = std::min(unsigned(rx.dlc),unsigned(is_canfd_mode ? 64 : 8));
     msg_bit_count += dlc * 8;
     bus_active_bit_count += msg_bit_count;
 

@@ -45,8 +45,8 @@
 #define ZENO_USB_BULK_TRANSFER_TIMEOUT      60000 /* 60 seconds in ms */
 #define ZENO_USB_INTERRUPT_TRANSFER_TIMEOUT 60000 /* 60 seconds in ms */
 #define ZENO_USB_TX_TIMEOUT                  5000  /* 5 seconds in ms */
-#define ZENO_USB_MAX_PACKET_IN               3072
-#define ZENO_USB_MAX_PACKET_OUT              3072
+#define ZENO_USB_MAX_PACKET_IN               4096
+#define ZENO_USB_MAX_PACKET_OUT              4096
 // #define ZENO_MAX_OUTSTANDING_TX_REQUEST        31
 
 class ZUSBContext;

@@ -655,7 +655,7 @@ ZCANFlags::ReadResult ZZenoCANChannel::readWait(uint32_t& id, uint8_t *msg,
     if (!readFromRXFifo(rx, timeout_in_ms)) return ReadTimeout;
 
     flags = 0;
-    id = long(rx.id);
+    id = uint32_t(rx.id);
     int msg_bit_count = 0;
     if ( rx.flags & ZenoCANFlagExtended ) {
         flags |= Extended;
@@ -684,11 +684,14 @@ ZCANFlags::ReadResult ZZenoCANChannel::readWait(uint32_t& id, uint8_t *msg,
         //TODO: Check flag CanFDESI
     }
 
-    dlc = std::min(unsigned(rx.dlc),unsigned(is_canfd_mode ? 64 : 8));
+    dlc = std::min(uint8_t(rx.dlc),uint8_t(is_canfd_mode ? 64 : 8));
     msg_bit_count += dlc * 8;
     bus_active_bit_count += msg_bit_count;
 
-    driver_timestmap_in_us = uint64_t(rx.timestamp / base_clock_divisor);
+    if (!(rx.flags & ZenoCANErrorFrame))
+        driver_timestmap_in_us = uint64_t(rx.timestamp / base_clock_divisor);
+    else
+        driver_timestmap_in_us /= 70;
 
     memcpy(msg, rx.data, rx.dlc);
 
@@ -738,7 +741,7 @@ ZCANFlags::SendResult ZZenoCANChannel::send(const uint32_t id,
                 return SendTimeout;
             }
         } else {
-            last_error_text ="Transmit request buffer overflow";
+            last_error_text = "Transmit request buffer overflow";
             tx_request_count --;
 
             return TransmitBufferOveflow;

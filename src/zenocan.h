@@ -93,6 +93,9 @@ enum ZenoCmdID {
 
     /* LIN command */
     ZENO_CMD_LIN_RESET_AUTO_BAUD,
+
+    /* CAN operation mode */
+    ZENO_CMD_SET_OP_MODE,
 };
 
 enum ZenoOpModeID {

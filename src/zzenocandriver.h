@@ -41,9 +41,10 @@
 #include <vector>
 #include <mutex>
 
-#define ZURAGON_VENDOR_ID         0x84d8
-#define ZENO_CANUNO_PRODUCT_ID    0x14
-#define ZENO_CANQUATRO_PRODUCT_ID 0x15
+#define ZURAGON_VENDOR_ID               0x84d8
+#define ZENO_CANUNO_PRODUCT_ID          0x14
+#define ZENO_CANQUATRO_PRODUCT_ID       0x15
+#define ZENO_CANQUATRO_MPCIE_PRODUCT_ID 0x16
 
 class ZUSBContext;
 class ZZenoLINDriver;

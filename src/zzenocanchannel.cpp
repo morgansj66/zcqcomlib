@@ -558,9 +558,33 @@ bool ZZenoCANChannel::setBusParametersFd(int bitrate, int sample_point, int sjw)
 
 bool ZZenoCANChannel::setDriverMode(ZCANFlags::DriverMode driver_mode)
 {
-    ZUNUSED(driver_mode)
+    ZenoOpMode cmd;
+    ZenoResponse reply;
 
-    /* TODO: implement me .... */
+    memset(&cmd,0,sizeof(ZenoOpMode));
+    cmd.h.cmd_id = ZENO_CMD_SET_OP_MODE;
+    cmd.channel = uint8_t(channel_index);
+
+    switch(driver_mode) {
+    case Silent:
+        cmd.op_mode = ZENO_SILENT_MODE;
+        break;
+    case Normal:
+        cmd.op_mode = is_canfd_mode ? ZENO_NORMAL_CANFD_MODE : ZENO_NORMAL_CAN20_ONLY_MODE;
+        break;
+
+    case Off:
+    case SelfReception:
+        last_error_text =  "Unsupported OP-mode:" + std::to_string(driver_mode);
+        return false;
+    }
+
+    if (!usb_can_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
+        last_error_text = usb_can_device->getLastErrorText();
+        zCritical("(ZenoUSB) Ch%d failed set driver mode: %s", channel_index, last_error_text.c_str());
+        return false;
+    }
+
     return true;
 }
 

@@ -39,6 +39,8 @@ set(SOURCES
   src/zzenolinchannel.cpp
   src/zzenolindriver.cpp
   src/zzenousbdevice.cpp
+  src/zthreadlocalstring.cpp
+  src/zzenotimersynch.cpp
 )
 
 set(HEADERS
@@ -70,6 +72,8 @@ set(HEADERS
   src/zusb.h
   src/zzenocandriver.h
   src/zzenolindriver.h
+  src/zthreadlocalstring.h
+  src/zzenotimersynch.h
 )
 
 set(INLCUDE_DIRS

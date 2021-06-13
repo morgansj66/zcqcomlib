@@ -76,7 +76,7 @@ ZZenoCANChannel::ZZenoCANChannel(int _channel_index,
 
 ZZenoCANChannel::~ZZenoCANChannel()
 {
-    if (is_open) close();
+    if (is_open) ZZenoCANChannel::close();
 }
 
 const std::string ZZenoCANChannel::getObjectText() const
@@ -153,10 +153,16 @@ bool ZZenoCANChannel::open(int open_flags)
         return false;
     }
 
+    if (!adjustInitialDeviceTimeDrift()) {
+        initial_timer_adjustment_done = 0;
+        close();
+        return false;
+    }
+    initial_timer_adjustment_done = 1;
+
     // last_device_timestamp_in_us = 0;
     max_outstanding_tx_requests = reply.max_pending_tx_msgs;
     open_start_ref_timestamp_in_us = uint64_t(reply.clock_start_ref);
-    initial_timer_adjustment_done = 0;
     base_clock_divisor = std::min(unsigned(reply.base_clock_divisor),1u);
 
     zDebug("Zeno - max outstanding TX: %d Base clock divisor: %d", reply.max_pending_tx_msgs, base_clock_divisor);
@@ -166,7 +172,7 @@ bool ZZenoCANChannel::open(int open_flags)
 
 bool ZZenoCANChannel::close()
 {
-    busOff();
+    ZZenoCANChannel::busOff();
 
     ZenoClose cmd;
     ZenoResponse reply;
@@ -183,6 +189,7 @@ bool ZZenoCANChannel::close()
     event_callback = std::function<void(EventData)>();
     is_canfd_mode = false;
     current_bitrate = 0;
+    initial_timer_adjustment_done = 0;
     usb_can_device->close();
     is_open--;
 
@@ -625,7 +632,7 @@ void ZZenoCANChannel::dispatchRXEvent(ZZenoCANChannel::FifoRxCANMessage* rx_mess
     d.d.msg.id = rx_message->id;
     d.d.msg.dlc = rx_message->dlc;
     d.d.msg.flags = rx_message->flags;
-    memcpy(d.d.msg.msg,rx_message->data,std::min(int(rx_message->dlc),64));
+    memcpy(d.d.msg.msg,rx_message->data,std::min(size_t(rx_message->dlc),size_t(64)));
 
     event_callback(d);
 }
@@ -640,7 +647,7 @@ void ZZenoCANChannel::dispatchTXEvent(ZZenoCANChannel::FifoRxCANMessage* tx_mess
     d.d.msg.id = tx_message->id;
     d.d.msg.dlc = tx_message->dlc;
     d.d.msg.flags = tx_message->flags;
-    memcpy(d.d.msg.msg,tx_message->data,std::min(int(tx_message->dlc),64));
+    memcpy(d.d.msg.msg,tx_message->data,std::min(size_t(tx_message->dlc),size_t(64)));
 
     event_callback(d);
 }
@@ -652,11 +659,14 @@ ZCANFlags::ReadResult ZZenoCANChannel::readWait(uint32_t& id, uint8_t *msg,
                                                 int timeout_in_ms)
 {
     FifoRxCANMessage rx;
-    if (!readFromRXFifo(rx, timeout_in_ms)) return ReadTimeout;
+    if (!readFromRXFifo(rx, timeout_in_ms)) {
+        onReadTimeoutCheck();
+        return ReadTimeout;
+    }
 
     flags = 0;
     id = uint32_t(rx.id);
-    int msg_bit_count = 0;
+    unsigned msg_bit_count = 0;
     if ( rx.flags & ZenoCANFlagExtended ) {
         flags |= Extended;
         msg_bit_count = 38 + 25;
@@ -692,6 +702,11 @@ ZCANFlags::ReadResult ZZenoCANChannel::readWait(uint32_t& id, uint8_t *msg,
         driver_timestmap_in_us = uint64_t(rx.timestamp / base_clock_divisor);
     else
         driver_timestmap_in_us /= 70;
+
+
+    int64_t adjusted_timestamp_in_us = int64_t(driver_timestmap_in_us);
+    adjusted_timestamp_in_us = caluclateTimeStamp(adjusted_timestamp_in_us);
+    driver_timestmap_in_us = uint64_t(adjusted_timestamp_in_us);
 
     memcpy(msg, rx.data, rx.dlc);
 
@@ -862,7 +877,7 @@ ZCANFlags::SendResult ZZenoCANChannel::sendFD(const uint32_t id,
         p2_request.h.transaction_id = p1_request.h.transaction_id;
         p2_request.dlc = p1_request.dlc;
 
-        memcpy(p2_request.data, msg + 20, std::min(dlc-20, 28));
+        memcpy(p2_request.data, msg + 20, std::min(size_t(dlc-20), size_t(28)));
 
         if (! usb_can_device->queueTxRequest(zenoRequest(p2_request), timeout_in_ms)) {
             last_error_text = usb_can_device->getLastErrorText();
@@ -878,7 +893,7 @@ ZCANFlags::SendResult ZZenoCANChannel::sendFD(const uint32_t id,
             p3_request.h.transaction_id = p1_request.h.transaction_id;
             p3_request.dlc = p1_request.dlc;
 
-            memcpy(p3_request.data, msg + 48, std::min(dlc-48, 16));
+            memcpy(p3_request.data, msg + 48, std::min(size_t(dlc-48), size_t(16)));
 
             if (! usb_can_device->queueTxRequest(zenoRequest(p3_request), timeout_in_ms)) {
                 last_error_text = usb_can_device->getLastErrorText();
@@ -912,7 +927,7 @@ uint64_t ZZenoCANChannel::getSerialNumber()
     unique_device_nr <<= 8;
     unique_device_nr |= (channel_index & 0xff);
 
-    return serial_number;
+    return unique_device_nr;
 }
 
 uint32_t ZZenoCANChannel::getFirmwareVersion()
@@ -929,13 +944,13 @@ uint64_t ZZenoCANChannel::getProductCode()
 int ZZenoCANChannel::getBusLoad()
 {
     auto t_now = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch();
-    uint64_t t0 = t_now.count();
-    uint64_t delta_time_in_us = t0 - last_measure_time_in_us;
-    delta_time_in_us = std::max(delta_time_in_us, uint64_t(1));
+    int64_t t0 = t_now.count();
+    int64_t delta_time_in_us = t0 - last_measure_time_in_us;
+    delta_time_in_us = std::max(delta_time_in_us, int64_t(1));
 
     // qDebug() << " busload delta time " << delta_time_in_ms << " active " << bus_active_bit_count << " rate " << bitrate;
 
-    uint64_t busload = (bus_active_bit_count * 100000000) / (current_bitrate * delta_time_in_us);
+    int64_t busload = (bus_active_bit_count * 100000000) / (current_bitrate * delta_time_in_us);
     last_measure_time_in_us = t0;
     bus_active_bit_count = 0;
     if ( busload > 100 ) busload = 100;
@@ -1085,7 +1100,7 @@ void ZZenoCANChannel::txAck(ZenoTxCANRequestAck& tx_ack)
             tx_message_fifo_mutex.unlock();
 
             if ( tx_ack.flags & ZenoCANErrorFrame ) {
-                zDebug("ZenoCAN Ch%d TX failed, remove pending TX", channel_index+1);;
+                zDebug("ZenoCAN Ch%d TX failed, remove pending TX", channel_index+1);
                 flushTxFifo();
                 return;
             }
@@ -1114,7 +1129,18 @@ void ZZenoCANChannel::txAck(ZenoTxCANRequestAck& tx_ack)
     zDebug("ZenoCAN Ch%d -- TX ack with transId: %d not queued", channel_index+1, tx_ack.trans_id);
 }
 
-bool ZZenoCANChannel::getZenoDeviceTimeInUs(uint64_t& timestamp_in_us)
+bool ZZenoCANChannel::getDeviceTimeInUs(int64_t &timestamp_in_us)
+{
+    if (!checkOpen()) return false;
+
+    /* Read the clock from the Zeno device */
+    if (!getZenoDeviceTimeInUs(timestamp_in_us)) return false;
+    adjustDeviceTimerWrapAround(timestamp_in_us);
+
+    return true;
+}
+
+bool ZZenoCANChannel::getZenoDeviceTimeInUs(int64_t& timestamp_in_us)
 {
     if (!checkOpen()) return false;
 
@@ -1123,7 +1149,7 @@ bool ZZenoCANChannel::getZenoDeviceTimeInUs(uint64_t& timestamp_in_us)
 
     memset(&cmd,0,sizeof(ZenoBusOn));
     cmd.h.cmd_id = ZENO_CMD_READ_CLOCK;
-    cmd.channel = channel_index;
+    cmd.channel = uint8_t(channel_index);
 
     if (!usb_can_device->sendAndWhaitReply(zenoRequest(cmd), zenoReply(reply))) {
         last_error_text = usb_can_device->getLastErrorText();
@@ -1131,7 +1157,7 @@ bool ZZenoCANChannel::getZenoDeviceTimeInUs(uint64_t& timestamp_in_us)
         return false;
     }
 
-    timestamp_in_us = reply.clock_value;
+    timestamp_in_us = int64_t(reply.clock_value);
     timestamp_in_us /= reply.divisor;
 
     return true;
@@ -1142,11 +1168,11 @@ uint64_t ZZenoCANChannel::getDeviceClock()
 {
     if (!checkOpen()) return false;
 
-    uint64_t t;
+    int64_t t;
     /* Read the clock from the Zeno device */
     if (!getZenoDeviceTimeInUs(t)) return false;
 
-    return t;
+    return uint64_t(t);
 }
 
 ZCANDriver* ZZenoCANChannel::getCANDriver() const
@@ -1198,6 +1224,6 @@ bool ZZenoCANChannel::waitForSpaceInTxFifo(std::unique_lock<std::mutex>& lock, i
         if (wait_result == std::cv_status::no_timeout) break;
     }
 
-    timeout_in_ms = timeout.count();
+    timeout_in_ms = int(timeout.count());
     return tx_message_fifo.count() < max_outstanding_tx_requests;
 }

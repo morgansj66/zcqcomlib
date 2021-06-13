@@ -68,10 +68,10 @@ public:
     bool close();
     bool isOpen() const;
 
-    int getCANChannelCount() const;
+    uint32_t getCANChannelCount() const;
     ZRef<ZCANChannel> getCANChannel(unsigned int channel_index);
 
-    int getLINChannelCount() const;
+    uint32_t getLINChannelCount() const;
     ZRef<ZLINChannel> getLINChannel(unsigned int channel_index);
 
     uint32_t getSerialNumber() const;
@@ -151,7 +151,7 @@ protected:
     std::vector<ZRef<ZZenoLINChannel> > lin_channel_list;
     std::string display_name;
 
-    mutable std::string last_error_text;
+    mutable ZThreadLocalString last_error_text;
 
     /* Reply state */
     int reply_timeout_in_ms;
@@ -169,9 +169,9 @@ protected:
     uint32_t fw_version;
 
     /* Clock info */
-    uint64_t t2_clock_start_ref_in_us;
+    int64_t t2_clock_start_ref_in_us;
     int init_calibrate_count;
-    int drift_time_in_us;
+    int64_t drift_time_in_us;
 
 private:
     bool ___queueRequestUnlocked(ZenoCmd* request, std::unique_lock<std::mutex>& lock, int timeout_in_ms);

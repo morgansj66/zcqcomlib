@@ -165,7 +165,7 @@ void ZZenoUSBDevice::retrieveDeviceInfo()
     zDebug("Zeno Capabilities: %x", info_response->capabilities);
     zDebug("       fw_version: %x", info_response->fw_version);
     zDebug("        serial-nr: %x", info_response->serial_number);
-    zDebug("          clock @: %fMhz", (float(info_response->clock_resolution) / 1000.0f));
+    zDebug("          clock @: %fMhz", double(info_response->clock_resolution) / 1000.0);
     zDebug("CAN channel count: %d", info_response->can_channel_count);
     zDebug("LIN channel count: %d", info_response->lin_channel_count);
 
@@ -402,25 +402,25 @@ bool ZZenoUSBDevice::isOpen() const
     return open_ref_count > 0;
 }
 
-int ZZenoUSBDevice::getCANChannelCount() const
+uint32_t ZZenoUSBDevice::getCANChannelCount() const
 {
-    return can_channel_list.size();
+    return uint32_t(can_channel_list.size());
 }
 
 ZRef<ZCANChannel> ZZenoUSBDevice::getCANChannel(unsigned int channel_index)
 {
-    if ( channel_index < 0 || channel_index >= can_channel_list.size()) return nullptr;
+    if ( channel_index >= can_channel_list.size()) return nullptr;
     return can_channel_list[channel_index].cast<ZCANChannel>();
 }
 
-int ZZenoUSBDevice::getLINChannelCount() const
+uint32_t ZZenoUSBDevice::getLINChannelCount() const
 {
-    return lin_channel_list.size();
+    return uint32_t(lin_channel_list.size());
 }
 
 ZRef<ZLINChannel> ZZenoUSBDevice::getLINChannel(unsigned int channel_index)
 {
-    if ( channel_index < 0 || channel_index >= lin_channel_list.size()) return nullptr;
+    if (channel_index >= lin_channel_list.size()) return nullptr;
     return lin_channel_list[channel_index].cast<ZLINChannel>();
 }
 
@@ -594,11 +594,11 @@ void ZZenoUSBDevice::handleInterruptData()
     switch(zeno_int_cmd->h.cmd_id) {
     case ZENO_CLOCK_INFO_INT:  {
         auto t_now = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch();
-        uint64_t host_t0 = t_now.count() - t2_clock_start_ref_in_us;
+        auto host_t0 = t_now - std::chrono::microseconds(t2_clock_start_ref_in_us);
         ZenoIntClockInfoCmd* clock_info = reinterpret_cast<ZenoIntClockInfoCmd*>(zeno_int_cmd);
 
-        uint64_t zeno_clock_in_us = clock_info->clock_value_t1 / clock_info->clock_divisor;
-        uint64_t drift_in_us = zeno_clock_in_us - host_t0;
+        ZZenoTimerSynch::ZTimeVal zeno_clock_in_us = ZZenoTimerSynch::ZTimeVal(clock_info->clock_value_t1 / clock_info->clock_divisor);
+        auto drift_in_us = std::chrono::microseconds(zeno_clock_in_us) - host_t0;
         // qint64 t0_d = qAbs((clock_info->clock_value_t1 & 0xffffffff) - clock_info->clock_value_t0) / clock_info->clock_divisor;
 
         // qDebug() << "Clock-info:" << zeno_clock_in_us << host_t0 << drift_in_us;
@@ -606,10 +606,10 @@ void ZZenoUSBDevice::handleInterruptData()
 
         if ( init_calibrate_count > 0 ) {
             init_calibrate_count--;
-            drift_time_in_us += drift_in_us;
+            drift_time_in_us += drift_in_us.count();
             if ( init_calibrate_count == 0 ) {
                 drift_time_in_us /= 5;
-                zDebug("Avg drift: %d", drift_time_in_us);
+                zDebug("Avg drift: %ld", drift_time_in_us);
                 t2_clock_start_ref_in_us -= drift_time_in_us;
             }
         }
@@ -618,10 +618,17 @@ void ZZenoUSBDevice::handleInterruptData()
                 if (!channel->is_open) continue;
                 if (!channel->initial_timer_adjustment_done) continue;
 
-                uint64_t device_clock_in_us = zeno_clock_in_us - channel->open_start_ref_timestamp_in_us;
-                // device_clock_in_us -= channel->getInitialTimeAdjustInUs();
-                // channel->ajdustDeviceTimeDrift(device_clock_in_us,
-                //                                drift_in_us);
+                for(auto channel : can_channel_list) {
+                    if (!channel->is_open) continue;
+                    if (!channel->initial_timer_adjustment_done) continue;
+
+                    ZZenoTimerSynch::ZTimeVal device_clock_in_us =
+                            zeno_clock_in_us - ZZenoTimerSynch::ZTimeVal(channel->open_start_ref_timestamp_in_us);
+                    device_clock_in_us -= channel->getInitialTimeAdjustInUs();
+
+                    channel->ajdustDeviceTimeDrift(ZZenoTimerSynch::ZTimeVal(device_clock_in_us),
+                                                   ZZenoTimerSynch::ZTimeVal(drift_in_us));
+                }
             }
         }
         break;
@@ -720,8 +727,8 @@ void ZZenoUSBDevice::handleCommand(ZenoCmd* zeno_cmd)
     }
     case ZENO_DEBUG: {
         ZenoDebug* zeno_debug = reinterpret_cast<ZenoDebug*>(zeno_cmd);
-        int debug_msg_len = 30;
-        for ( int i = 0; i < 30; ++i ) {
+        unsigned debug_msg_len = 30;
+        for ( unsigned i = 0; i < 30; ++i ) {
             if ( zeno_debug->debug_msg[i] == 0 ) {
                 debug_msg_len = i;
                 break;

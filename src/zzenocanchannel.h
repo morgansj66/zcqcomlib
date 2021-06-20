@@ -102,7 +102,6 @@ private:
     int channel_index;
     std::atomic<int> is_open;
     bool is_canfd_mode;
-    std::atomic<int> initial_timer_adjustment_done;
     ZZenoUSBDevice* usb_can_device;
 
     ZThreadLocalString last_error_text;

@@ -104,6 +104,9 @@ public:
         return init_calibrate_count == 0;
     }
 
+    double getDriftFactor() const {
+        return drift_factor;
+    }
 protected:
     void freeTransfers();
     int getNextTransferIndex();
@@ -113,6 +116,9 @@ protected:
     void handleCommand(ZenoCmd* zeno_cmd);
     void startClockInt();
     void stopClockInt();
+    void ajdustDeviceTimeDrift(ZZenoTimerSynch::ZTimeVal device_time_in_us,
+                               ZZenoTimerSynch::ZTimeVal new_drift_time_in_us,
+                               ZZenoTimerSynch::ZTimeVal max_adjust);
 
     ZZenoCANDriver* driver;
     ZUSBContext* usb_context;
@@ -172,6 +178,10 @@ protected:
     int64_t t2_clock_start_ref_in_us;
     int init_calibrate_count;
     int64_t drift_time_in_us;
+
+    /* Timer drift */
+    ZZenoTimerSynch::ZTimeVal time_drift_in_us;
+    double   drift_factor;
 
 private:
     bool ___queueRequestUnlocked(ZenoCmd* request, std::unique_lock<std::mutex>& lock, int timeout_in_ms);

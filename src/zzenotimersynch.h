@@ -45,21 +45,15 @@ public:
                     uint64_t _TIMER_wrap_around_step = 0x100000000);
     virtual ~ZZenoTimerSynch();
 
-    bool adjustInitialDeviceTimeDrift();
-
-    void ajdustDeviceTimeDrift(ZTimeVal device_time_in_us, ZTimeVal new_drift_time_in_us, ZTimeVal max_adjust);
+    void initializeDeviceTimeDrift();
 
     virtual bool getDeviceTimeInUs(int64_t& timestamp_in_us) = 0;
-
-    ZTimeVal getTimeDriftInUs() const {
-        return time_drift_in_us;
-    }
 
     ZTimeVal getLastDriverTimeStampInUs() const {
         return last_driver_timestamp_in_us;
     }    
 
-    int64_t caluclateTimeStamp(const int64_t driver_timestamp_in_us);
+    int64_t caluclateTimeStamp(const int64_t driver_timestamp_in_us, const double drift_factor);
     void onReadTimeoutCheck();
 
     void synchToTimerOffset(ZTimeVal t);
@@ -69,15 +63,13 @@ protected:
     void adjustEventTimestampWrapAround(int64_t& event_timestamp_in_us);
     ZTimeVal systemTimeNow() const;
 
-    /* Timer drift */
-    ZTimeVal time_drift_in_us;
+    /* Timer drift */    
     ZTimeVal last_driver_timestamp_in_us;
     ZTimeVal last_t0_timestamp_in_us;
     ZTimeVal last_device_timestamp_in_us;
     ZTimeVal last_event_timestamp_in_us;
     uint64_t timer_msb_timestamp_part;
     uint64_t event_msb_timestamp_part;
-    double   drift_factor;
     ZTimeVal synch_offset;
 
     ZTimeVal average_round_trip_in_us;

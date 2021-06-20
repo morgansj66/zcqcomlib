@@ -38,7 +38,6 @@
 ZZenoTimerSynch::ZZenoTimerSynch(uint64_t _TIMER_wrap_around_mask,
                                  uint64_t _TIMER_wrap_around_step)
     : event_msb_timestamp_part(0),
-      drift_factor(0),
       TIMER_wrap_around_mask(_TIMER_wrap_around_mask),
       TIMER_wrap_around_step(_TIMER_wrap_around_step)
 {
@@ -50,52 +49,17 @@ ZZenoTimerSynch::~ZZenoTimerSynch()
     /*  no op */
 }
 
-bool ZZenoTimerSynch::adjustInitialDeviceTimeDrift()
+void ZZenoTimerSynch::initializeDeviceTimeDrift()
 {
     last_driver_timestamp_in_us = ZTimeVal();
     last_event_timestamp_in_us = ZTimeVal();
     last_appl_timestamp_in_us = ZTimeVal();
     synch_offset = ZTimeVal();
-    time_drift_in_us = ZTimeVal();
     timer_msb_timestamp_part = 0;
     event_msb_timestamp_part = 0;
-    drift_factor = 0;
-
-    /* Get the average round-trip time */
-    int64_t time_in_us;
-    average_round_trip_in_us = ZTimeVal();
-    for ( int i = 0; i < 100; ++i ) {
-        auto t0 = systemTimeNow();
-        if (!getDeviceTimeInUs(time_in_us)) return false;
-        auto round_trip = systemTimeNow() - t0;
-
-        average_round_trip_in_us += round_trip;
-    }
-    average_round_trip_in_us /= 100;
-    average_round_trip_in_us /= 2;
-
-    zDebug("Avg round trip: %ld", average_round_trip_in_us.count());
-
-    return true;
 }
 
-void ZZenoTimerSynch::ajdustDeviceTimeDrift(ZTimeVal device_time_in_us,
-                                            ZTimeVal new_drift_time_in_us,
-                                            ZTimeVal max_adjust)
-{
-    ZTimeVal diff = time_drift_in_us - new_drift_time_in_us;
-
-    ZTimeVal adjust = std::min(ZTimeVal(std::abs(diff.count())), max_adjust);
-    if ( diff.count() > 0 )
-        time_drift_in_us -= adjust;
-    else
-        time_drift_in_us += adjust;
-
-    if ( device_time_in_us != ZTimeVal::zero() )
-        drift_factor = double(time_drift_in_us.count()) / double(device_time_in_us.count());
-}
-
-int64_t ZZenoTimerSynch::caluclateTimeStamp(const int64_t driver_timestamp_in_us)
+int64_t ZZenoTimerSynch::caluclateTimeStamp(const int64_t driver_timestamp_in_us, const double drift_factor)
 {
     int64_t timestamp_in_us = driver_timestamp_in_us;
     adjustEventTimestampWrapAround(timestamp_in_us);

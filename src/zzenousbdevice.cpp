@@ -34,9 +34,22 @@
 #include "zzenocandriver.h"
 #include "zusbcontext.h"
 #include "zdebug.h"
+
 #include <string.h>
 #include <assert.h>
+#include <algorithm>
 #include <chrono>
+#include <cmath>
+
+#ifdef _WIN32
+  /* some bloody #define of min conflicts with C++ std::min and std::max */
+  #ifdef min
+    #undef min
+  #endif
+  #ifdef max
+    #undef max
+  #endif
+#endif
 
 ZZenoUSBDevice::ZZenoUSBDevice(ZZenoCANDriver* _driver,
                                int _device_no, libusb_device* _device,
@@ -56,7 +69,9 @@ ZZenoUSBDevice::ZZenoUSBDevice(ZZenoCANDriver* _driver,
   fw_version(0),
   t2_clock_start_ref_in_us(0),
   init_calibrate_count(0),
-  drift_time_in_us(0)
+  drift_time_in_us(0),
+  time_drift_in_us(0),
+  drift_factor(0)
 {
     libusb_ref_device(device);
     int res;
@@ -614,15 +629,9 @@ void ZZenoUSBDevice::handleInterruptData()
         }
         else max_adjust = ZZenoTimerSynch::ZTimeVal(120);
 
-        for(auto channel : can_channel_list) {
-            if (!channel->is_open) continue;
-            if (!channel->initial_timer_adjustment_done) continue;
-
-            channel->ajdustDeviceTimeDrift(ZZenoTimerSynch::ZTimeVal(zeno_clock_in_us),
-                                           ZZenoTimerSynch::ZTimeVal(drift_in_us),
-                                           max_adjust);
-        }
-
+        ajdustDeviceTimeDrift(ZZenoTimerSynch::ZTimeVal(zeno_clock_in_us),
+                              ZZenoTimerSynch::ZTimeVal(drift_in_us),
+                              max_adjust);
         break;
     }
     default:
@@ -752,6 +761,8 @@ void ZZenoUSBDevice::startClockInt()
     t2_clock_start_ref_in_us = t_now.count();
     init_calibrate_count = 5;
     drift_time_in_us = 0;
+    time_drift_in_us = ZZenoTimerSynch::ZTimeVal();
+    drift_factor = 0;
 }
 
 void ZZenoUSBDevice::stopClockInt()
@@ -766,6 +777,23 @@ void ZZenoUSBDevice::stopClockInt()
         zCritical("(ZenoUSB): failed to stop clock INT: %s", last_error_text.c_str());
         return;
     }
+}
+
+void ZZenoUSBDevice::ajdustDeviceTimeDrift(ZZenoTimerSynch::ZTimeVal device_time_in_us,
+                                           ZZenoTimerSynch::ZTimeVal new_drift_time_in_us,
+                                           ZZenoTimerSynch::ZTimeVal max_adjust)
+{
+    ZZenoTimerSynch::ZTimeVal diff = time_drift_in_us - new_drift_time_in_us;
+
+    ZZenoTimerSynch::ZTimeVal adjust = std::min(ZZenoTimerSynch::ZTimeVal(std::abs(diff.count())), max_adjust);
+
+    if ( diff.count() > 0 )
+        time_drift_in_us -= adjust;
+    else
+        time_drift_in_us += adjust;
+
+    if ( device_time_in_us != ZZenoTimerSynch::ZTimeVal::zero() )
+        drift_factor = double(time_drift_in_us.count()) / double(device_time_in_us.count());
 }
 
 void ZZenoUSBDevice::__inBulkTransferCallback(libusb_transfer* in_bulk_transfer)

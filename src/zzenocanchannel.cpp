@@ -51,7 +51,6 @@ ZZenoCANChannel::ZZenoCANChannel(int _channel_index,
                                  ZZenoUSBDevice* _usb_can_device)
     : channel_index(_channel_index),
       is_open(false),is_canfd_mode(false),
-      initial_timer_adjustment_done(false),
       usb_can_device(_usb_can_device),
       tx_request_count(0), tx_next_trans_id(0),
       max_outstanding_tx_requests(31),
@@ -153,14 +152,8 @@ bool ZZenoCANChannel::open(int open_flags)
         return false;
     }
 
-    if (!adjustInitialDeviceTimeDrift()) {
-        initial_timer_adjustment_done = 0;
-        close();
-        return false;
-    }
-    initial_timer_adjustment_done = 1;
+    initializeDeviceTimeDrift();
 
-    // last_device_timestamp_in_us = 0;
     max_outstanding_tx_requests = reply.max_pending_tx_msgs;
     base_clock_divisor = std::max(unsigned(reply.base_clock_divisor),1u);
     open_start_ref_timestamp_in_us = uint64_t(reply.clock_start_ref / 70);
@@ -192,7 +185,6 @@ bool ZZenoCANChannel::close()
     event_callback = std::function<void(EventData)>();
     is_canfd_mode = false;
     current_bitrate = 0;
-    initial_timer_adjustment_done = 0;
     usb_can_device->close();
     is_open--;
 
@@ -708,10 +700,11 @@ ZCANFlags::ReadResult ZZenoCANChannel::readWait(uint32_t& id, uint8_t *msg,
 
 
     int64_t adjusted_timestamp_in_us = int64_t(driver_timestmap_in_us);
-    adjusted_timestamp_in_us = caluclateTimeStamp(adjusted_timestamp_in_us);
+    adjusted_timestamp_in_us = caluclateTimeStamp(adjusted_timestamp_in_us,
+                                                  usb_can_device->getDriftFactor());
     driver_timestmap_in_us = uint64_t(adjusted_timestamp_in_us);
 
-    memcpy(msg, rx.data, rx.dlc);
+    memcpy(msg, rx.data, dlc);
 
     return ReadStatusOK;
 }

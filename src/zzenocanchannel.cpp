@@ -162,8 +162,11 @@ bool ZZenoCANChannel::open(int open_flags)
 
     // last_device_timestamp_in_us = 0;
     max_outstanding_tx_requests = reply.max_pending_tx_msgs;
-    open_start_ref_timestamp_in_us = uint64_t(reply.clock_start_ref);
-    base_clock_divisor = std::min(unsigned(reply.base_clock_divisor),1u);
+    base_clock_divisor = std::max(unsigned(reply.base_clock_divisor),1u);
+    open_start_ref_timestamp_in_us = uint64_t(reply.clock_start_ref / 70);
+
+    synchToTimerOffset(ZTimeVal(open_start_ref_timestamp_in_us));
+    zDebug("Ch%d - open ts %lld", channel_index, open_start_ref_timestamp_in_us);
 
     zDebug("Zeno - max outstanding TX: %d Base clock divisor: %d", reply.max_pending_tx_msgs, base_clock_divisor);
 

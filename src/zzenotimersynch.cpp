@@ -37,7 +37,8 @@
 
 ZZenoTimerSynch::ZZenoTimerSynch(uint64_t _TIMER_wrap_around_mask,
                                  uint64_t _TIMER_wrap_around_step)
-    : drift_factor(0),
+    : event_msb_timestamp_part(0),
+      drift_factor(0),
       TIMER_wrap_around_mask(_TIMER_wrap_around_mask),
       TIMER_wrap_around_step(_TIMER_wrap_around_step)
 {
@@ -54,6 +55,8 @@ bool ZZenoTimerSynch::adjustInitialDeviceTimeDrift()
     last_driver_timestamp_in_us = ZTimeVal();
     last_event_timestamp_in_us = ZTimeVal();
     last_appl_timestamp_in_us = ZTimeVal();
+    synch_offset = ZTimeVal();
+    time_drift_in_us = ZTimeVal();
     timer_msb_timestamp_part = 0;
     event_msb_timestamp_part = 0;
     drift_factor = 0;
@@ -73,56 +76,20 @@ bool ZZenoTimerSynch::adjustInitialDeviceTimeDrift()
 
     zDebug("Avg round trip: %ld", average_round_trip_in_us.count());
 
-    /* Reset device timer to 0 */
-    initial_time_adjust_in_us = ZTimeVal();
-    auto initial_t0 = systemTimeNow();
-
-    if (!getDeviceTimeInUs(time_in_us)) return false;
-    initial_time_adjust_in_us = ZTimeVal(time_in_us) - average_round_trip_in_us;
-
-    /* Take the lowest of 5 */
-    if (!getDeviceTimeInUs(time_in_us)) return false;
-    auto t_now = systemTimeNow() - initial_t0;
-    time_drift_in_us =ZTimeVal(time_in_us) - t_now + average_round_trip_in_us;
-
-
-    /* Take the best out of 16 */
-    for ( int i = 0; i < 16; ++i ) {
-        auto t0 = systemTimeNow() - initial_t0 + average_round_trip_in_us;
-
-        if (!getDeviceTimeInUs(time_in_us)) return false;
-        last_device_timestamp_in_us = ZTimeVal(time_in_us);
-
-        auto drift = ZTimeVal(time_in_us) - (last_t0_timestamp_in_us = t0);
-
-        if (std::abs(drift.count()) < std::abs(time_drift_in_us.count()))
-            time_drift_in_us = drift;
-    }
-
-    /* Absolute max is +/- 1.2 ms */
-    time_drift_in_us = std::min(time_drift_in_us, ZTimeVal(1200));
-    time_drift_in_us = std::max(time_drift_in_us, ZTimeVal(-1200));
-
-    if ( time_in_us != 0  )
-        drift_factor = double(time_drift_in_us.count()) / double(time_in_us);
-
-    zDebug("Init drift %ld drift F %Lf ", time_drift_in_us.count(), drift_factor);
-
     return true;
 }
 
 void ZZenoTimerSynch::ajdustDeviceTimeDrift(ZTimeVal device_time_in_us,
-                                            ZTimeVal new_drift_time_in_us)
+                                            ZTimeVal new_drift_time_in_us,
+                                            ZTimeVal max_adjust)
 {
     ZTimeVal diff = time_drift_in_us - new_drift_time_in_us;
 
-    ZTimeVal adjust = std::min(ZTimeVal(std::abs(diff.count())), ZTimeVal(250));
+    ZTimeVal adjust = std::min(ZTimeVal(std::abs(diff.count())), max_adjust);
     if ( diff.count() > 0 )
         time_drift_in_us -= adjust;
     else
         time_drift_in_us += adjust;
-
-    // zDebug("drift %ld - %ld adjust %ld", diff.count(), time_drift_in_us.count(), adjust.count());
 
     if ( device_time_in_us != ZTimeVal::zero() )
         drift_factor = double(time_drift_in_us.count()) / double(device_time_in_us.count());
@@ -133,10 +100,16 @@ int64_t ZZenoTimerSynch::caluclateTimeStamp(const int64_t driver_timestamp_in_us
     int64_t timestamp_in_us = driver_timestamp_in_us;
     adjustEventTimestampWrapAround(timestamp_in_us);
 
+    timestamp_in_us += synch_offset.count();
     double drift = double(timestamp_in_us) * drift_factor;
     timestamp_in_us -= int64_t(drift);
-    timestamp_in_us += synch_offset.count();
-    // qDebug() << " Drift " << drift << getTimeDriftInUs() << synch_offset;
+
+    // zDebug("Drift %Lf - factor %Lf synch_offset %lld", drift, drift_factor, synch_offset.count());
+
+    // zDebug("last_appl_timestamp_in_us %lld %lld %lld",
+    //        last_appl_timestamp_in_us.count(),
+    //        timestamp_in_us,
+    //        driver_timestamp_in_us);
 
     if (last_appl_timestamp_in_us.count() > timestamp_in_us) {
         last_appl_timestamp_in_us ++; /* Advance 1us */
@@ -162,6 +135,12 @@ void ZZenoTimerSynch::onReadTimeoutCheck()
     }
 }
 
+void ZZenoTimerSynch::synchToTimerOffset(ZZenoTimerSynch::ZTimeVal t)
+{
+    zDebug("Synch to %ld", t.count());
+    synch_offset = t;
+}
+
 void ZZenoTimerSynch::adjustDeviceTimerWrapAround(int64_t& timer_timestamp_in_us)
 {
     /* Check if timestamp has wrapped around */
@@ -180,7 +159,6 @@ void ZZenoTimerSynch::adjustDeviceTimerWrapAround(int64_t& timer_timestamp_in_us
     last_driver_timestamp_in_us = ZTimeVal(timer_timestamp_in_us);
 
     timer_timestamp_in_us += timer_msb_timestamp_part;
-    timer_timestamp_in_us -= initial_time_adjust_in_us.count();
 }
 
 void ZZenoTimerSynch::adjustEventTimestampWrapAround(int64_t& event_timestamp_in_us)
@@ -198,7 +176,7 @@ void ZZenoTimerSynch::adjustEventTimestampWrapAround(int64_t& event_timestamp_in
         }
 
         int64_t t = event_timestamp_in_us + int64_t(event_msb_timestamp_part + TIMER_wrap_around_step);
-        t -= initial_time_adjust_in_us.count();
+        // t -= initial_time_adjust_in_us.count();
 
         /* Timestamp should not differ too much from device-timestamp -
          * or something is really screwed up, let's test with 5 seconds, just to be safe */
@@ -208,7 +186,7 @@ void ZZenoTimerSynch::adjustEventTimestampWrapAround(int64_t& event_timestamp_in
             last_event_timestamp_in_us = ZTimeVal(event_timestamp_in_us & int64_t(TIMER_wrap_around_mask));
 
             event_timestamp_in_us += event_msb_timestamp_part;
-            event_timestamp_in_us -= initial_time_adjust_in_us.count();
+            // event_timestamp_in_us -= initial_time_adjust_in_us.count();
             return;
         }
 
@@ -219,7 +197,7 @@ void ZZenoTimerSynch::adjustEventTimestampWrapAround(int64_t& event_timestamp_in
     last_event_timestamp_in_us = ZTimeVal(event_timestamp_in_us);
 
     event_timestamp_in_us += event_msb_timestamp_part;
-    event_timestamp_in_us -= initial_time_adjust_in_us.count();
+    // event_timestamp_in_us -= initial_time_adjust_in_us.count();
 }
 
 ZZenoTimerSynch::ZTimeVal ZZenoTimerSynch::systemTimeNow() const

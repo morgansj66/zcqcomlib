@@ -47,7 +47,7 @@ public:
 
     bool adjustInitialDeviceTimeDrift();
 
-    void ajdustDeviceTimeDrift(ZTimeVal device_time_in_us, ZTimeVal new_drift_time_in_us);
+    void ajdustDeviceTimeDrift(ZTimeVal device_time_in_us, ZTimeVal new_drift_time_in_us, ZTimeVal max_adjust);
 
     virtual bool getDeviceTimeInUs(int64_t& timestamp_in_us) = 0;
 
@@ -57,11 +57,7 @@ public:
 
     ZTimeVal getLastDriverTimeStampInUs() const {
         return last_driver_timestamp_in_us;
-    }
-
-    ZTimeVal getInitialTimeAdjustInUs() const {
-        return initial_time_adjust_in_us;
-    }
+    }    
 
     int64_t caluclateTimeStamp(const int64_t driver_timestamp_in_us);
     void onReadTimeoutCheck();
@@ -85,7 +81,6 @@ protected:
     ZTimeVal synch_offset;
 
     ZTimeVal average_round_trip_in_us;
-    ZTimeVal initial_time_adjust_in_us;
     ZTimeVal last_appl_timestamp_in_us;
 
     // VxReference<VxTimerBase> drift_timer;

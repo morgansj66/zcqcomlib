@@ -599,11 +599,9 @@ void ZZenoUSBDevice::handleInterruptData()
 
         ZZenoTimerSynch::ZTimeVal zeno_clock_in_us = ZZenoTimerSynch::ZTimeVal(clock_info->clock_value_t1 / clock_info->clock_divisor);
         auto drift_in_us = std::chrono::microseconds(zeno_clock_in_us) - host_t0;
-        // qint64 t0_d = qAbs((clock_info->clock_value_t1 & 0xffffffff) - clock_info->clock_value_t0) / clock_info->clock_divisor;
 
-        // qDebug() << "Clock-info:" << zeno_clock_in_us << host_t0 << drift_in_us;
-        // qDebug() << "        t0:" << clock_info->clock_value_t0/70 << t0_d << drift_in_us - t0_d << drift_in_us + t0_d;
-
+        // zDebug("Zeno clock: %ld",zeno_clock_in_us.count());
+        ZZenoTimerSynch::ZTimeVal max_adjust;
         if ( init_calibrate_count > 0 ) {
             init_calibrate_count--;
             drift_time_in_us += drift_in_us.count();
@@ -612,25 +610,19 @@ void ZZenoUSBDevice::handleInterruptData()
                 zDebug("Avg drift: %ld", drift_time_in_us);
                 t2_clock_start_ref_in_us -= drift_time_in_us;
             }
+            max_adjust = ZZenoTimerSynch::ZTimeVal(12);
         }
-        else {
-            for(auto channel : can_channel_list) {
-                if (!channel->is_open) continue;
-                if (!channel->initial_timer_adjustment_done) continue;
+        else max_adjust = ZZenoTimerSynch::ZTimeVal(120);
 
-                for(auto channel : can_channel_list) {
-                    if (!channel->is_open) continue;
-                    if (!channel->initial_timer_adjustment_done) continue;
+        for(auto channel : can_channel_list) {
+            if (!channel->is_open) continue;
+            if (!channel->initial_timer_adjustment_done) continue;
 
-                    ZZenoTimerSynch::ZTimeVal device_clock_in_us =
-                            zeno_clock_in_us - ZZenoTimerSynch::ZTimeVal(channel->open_start_ref_timestamp_in_us);
-                    device_clock_in_us -= channel->getInitialTimeAdjustInUs();
-
-                    channel->ajdustDeviceTimeDrift(ZZenoTimerSynch::ZTimeVal(device_clock_in_us),
-                                                   ZZenoTimerSynch::ZTimeVal(drift_in_us));
-                }
-            }
+            channel->ajdustDeviceTimeDrift(ZZenoTimerSynch::ZTimeVal(zeno_clock_in_us),
+                                           ZZenoTimerSynch::ZTimeVal(drift_in_us),
+                                           max_adjust);
         }
+
         break;
     }
     default:

@@ -68,6 +68,7 @@ ZZenoUSBDevice::ZZenoUSBDevice(ZZenoCANDriver* _driver,
   serial_number(0),
   fw_version(0),
   t2_clock_start_ref_in_us(0),
+  t2_e_clock_start_ref_in_us(0),
   init_calibrate_count(0),
   drift_time_in_us(0),
   time_drift_in_us(0),
@@ -615,7 +616,7 @@ void ZZenoUSBDevice::handleInterruptData()
         ZZenoTimerSynch::ZTimeVal zeno_clock_in_us = ZZenoTimerSynch::ZTimeVal(clock_info->clock_value_t1 / clock_info->clock_divisor);
         auto drift_in_us = std::chrono::microseconds(zeno_clock_in_us) - host_t0;
 
-        // zDebug("Zeno clock: %ld",zeno_clock_in_us.count());
+        // zDebug("Zeno clock: %ld - %lld - %lld t_now %lld host_t0 %lld",zeno_clock_in_us.count(), drift_in_us.count(), drift_time_in_us, t_now.count(), host_t0.count());
         ZZenoTimerSynch::ZTimeVal max_adjust;
         if ( init_calibrate_count > 0 ) {
             init_calibrate_count--;
@@ -627,7 +628,14 @@ void ZZenoUSBDevice::handleInterruptData()
             }
             max_adjust = ZZenoTimerSynch::ZTimeVal(12);
         }
-        else max_adjust = ZZenoTimerSynch::ZTimeVal(120);
+        else {
+            max_adjust = ZZenoTimerSynch::ZTimeVal(120);
+            int64_t e_diff = t2_clock_start_ref_in_us - t2_e_clock_start_ref_in_us;
+            if (e_diff != 0) {
+                e_diff = std::min(e_diff, int64_t(32));
+                t2_e_clock_start_ref_in_us += e_diff;
+            }
+        }
 
         ajdustDeviceTimeDrift(ZZenoTimerSynch::ZTimeVal(zeno_clock_in_us),
                               ZZenoTimerSynch::ZTimeVal(drift_in_us),
@@ -751,14 +759,21 @@ void ZZenoUSBDevice::startClockInt()
     memset(&cmd, 0, sizeof(cmd));
     cmd.h.cmd_id = ZEMO_CMD_START_CLOCK_INT;
 
+
     zDebug("Sending Start-Clock INT cmd");
+    auto t0 = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch();
     if  ( !sendAndWhaitReply(&cmd, &reply) ) {
         zCritical("(ZenoUSB): failed to start clock INT: %s", last_error_text.c_str());
         return;
     }
 
     auto t_now = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch();
-    t2_clock_start_ref_in_us = t_now.count();
+    auto t_diff = t_now - t0;
+
+    /* Estimate around 256us round-trip */
+    t2_clock_start_ref_in_us = t_now.count() + t_diff.count();
+    t2_e_clock_start_ref_in_us = t2_clock_start_ref_in_us;
+
     init_calibrate_count = 5;
     drift_time_in_us = 0;
     time_drift_in_us = ZZenoTimerSynch::ZTimeVal();

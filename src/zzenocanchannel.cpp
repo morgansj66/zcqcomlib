@@ -702,6 +702,7 @@ ZCANFlags::ReadResult ZZenoCANChannel::readWait(uint32_t& id, uint8_t *msg,
     int64_t adjusted_timestamp_in_us = int64_t(driver_timestmap_in_us);
     adjusted_timestamp_in_us = caluclateTimeStamp(adjusted_timestamp_in_us,
                                                   usb_can_device->getDriftFactor());
+    adjusted_timestamp_in_us += usb_can_device->getT2ClockRef();
     driver_timestmap_in_us = uint64_t(adjusted_timestamp_in_us);
 
     memcpy(msg, rx.data, dlc);

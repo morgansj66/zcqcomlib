@@ -49,6 +49,7 @@
 #endif
 
 static std::mutex printf_mutex;
+static std::chrono::microseconds t0;
 
 static void check_canlib_error(const char* id, canStatus stat)
 {
@@ -98,6 +99,7 @@ void rx_worker(int channel)
       unsigned long time;
 
       stat = canReadWait(hnd, &id, &msg, &dlc, &flag, &time, unsigned(-1));
+      time -= static_cast<unsigned long>(t0.count());
 
       if (stat != canOK) {
           check_canlib_error("\ncanReadWait", stat);
@@ -133,6 +135,8 @@ void rx_worker(int channel)
 int main(int argc, char **argv)
 {
     canInitializeLibrary();
+
+    t0 = std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch();
 
     std::thread rx_thread1(rx_worker, 0);
     std::thread rx_thread2(rx_worker, 1);

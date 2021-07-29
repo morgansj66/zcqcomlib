@@ -20,15 +20,19 @@
 
 #define ZENO_USB_TIMEOUT		  1000 /* msecs */
 #define ZENO_USB_RX_BUFFER_SIZE   4096
+#define ZENO_USB_INT_BUFFER_SIZE  16
 #define ZENO_USB_MAX_NET_DEVICES  8
 #define ZENO_USB_MAX_RX_URBS      6
+
 struct zeno_usb
 {
 	struct usb_device *udev;
 	struct usb_interface *intf;
+    struct usb_interface *clock_int_intf;
 	struct zeno_usb_net_priv *nets[ZENO_USB_MAX_NET_DEVICES];
 
     struct usb_endpoint_descriptor *bulk_in, *bulk_out;
+    struct usb_endpoint_descriptor *clock_int_in;
 	struct usb_anchor rx_anchor;
     
     u32 firmware_version;
@@ -52,7 +56,18 @@ struct zeno_usb
     int zeno_response_cmd_id;
     ZenoResponse* zeno_response;
     bool reply_received;
-
+    struct completion cmd_reply_comp;
+    
+    /* Clock INT RX */
+    void *rx_int_buf;
+	dma_addr_t rx_int_buf_dma;
+    ktime_t t2_clock_start_ref;
+    ktime_t drift_time;
+    ktime_t last_device_time;
+    // double drift_factor;
+    int init_calibrate_count;
+    unsigned int last_usb_overflow_count;
+    
     /* RX */
     bool rx_init_done;
     void *rxbuf[ZENO_USB_MAX_RX_URBS];
@@ -86,12 +101,18 @@ struct zeno_usb_net_priv
 };
 
 int zeno_cq_setup_endpoints(struct zeno_usb *dev);
+int zeno_cq_setup_clock_int_endpoints(struct zeno_usb *dev);
 int zeno_cq_device_reset(struct zeno_usb *dev);
 int zeno_cq_get_device_info(struct zeno_usb *dev);
+int zeno_cq_start_clock_int(struct zeno_usb *dev);
+int zeno_cq_stop_clock_int(struct zeno_usb *dev);
+int zeno_cq_start_bus_on(struct zeno_usb_net_priv *net);
+int zeno_cq_stop_bus_off(struct zeno_usb_net_priv *net);
 int zeno_cq_set_mode(struct net_device *netdev, enum can_mode mode);
+int zeno_cq_set_opt_mode(const struct zeno_usb_net_priv *priv);
 int zeno_cq_set_bittiming(struct net_device *netdev);
 int zeno_cq_set_data_bittiming(struct net_device *netdev);
-int zeno_cq_get_berr_counter(const struct net_device *netdev, struct can_berr_counter *bec);
-    
+int zeno_cq_get_berr_counter(const struct net_device *netdev, struct can_berr_counter *bec);    
+void zeno_cq_read_bulk_callback(struct zeno_usb *dev,void *in_buffer, int bytes_transferred);
 
 #endif /*  ZENO_USB_H */

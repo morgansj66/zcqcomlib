@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# GNU Makefile for building the Zeno CANquatro Linux SocketCAN driver
+#
+# Copyright(C) 2021 Zuragon LTd - www.zuragon.com
+#
+
+obj-m += zeno_usb.o
+zeno_usb-y = zeno_usb_core.o zeno_usb_cq.o

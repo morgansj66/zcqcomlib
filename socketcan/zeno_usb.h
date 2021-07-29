@@ -41,7 +41,8 @@ struct zeno_usb
     unsigned int nr_of_can_channels;
     unsigned int nr_of_lin_channels;
     unsigned int system_clock_resolution;
-
+    bool device_disconnected;
+    
     /* CAN CHannel 1 - 4 */
     unsigned int clock_freq_ch14;
 	const struct can_bittiming_const * bittiming_const_ch14;
@@ -106,6 +107,8 @@ int zeno_cq_device_reset(struct zeno_usb *dev);
 int zeno_cq_get_device_info(struct zeno_usb *dev);
 int zeno_cq_start_clock_int(struct zeno_usb *dev);
 int zeno_cq_stop_clock_int(struct zeno_usb *dev);
+int zeno_cq_open(struct zeno_usb_net_priv *net);
+int zeno_cq_close(struct zeno_usb_net_priv *net);
 int zeno_cq_start_bus_on(struct zeno_usb_net_priv *net);
 int zeno_cq_stop_bus_off(struct zeno_usb_net_priv *net);
 int zeno_cq_set_mode(struct net_device *netdev, enum can_mode mode);

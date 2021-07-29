@@ -52,7 +52,7 @@ static void zeno_usb_read_bulk_callback(struct urb *urb)
 		dev_info(&dev->intf->dev, "Rx URB aborted (%d)\n", urb->status);
 		goto resubmit_urb;
 	}
-    
+    printk(KERN_DEBUG "Zeno RCB: %d\n", urb->actual_length);
 	zeno_cq_read_bulk_callback(dev, urb->transfer_buffer,
                                urb->actual_length);
     
@@ -158,6 +158,10 @@ static int zeno_usb_open(struct net_device *netdev)
 	if (err)
 		goto error;
 
+    err = zeno_cq_open(priv);
+	if (err)
+		goto error;
+
 	err = zeno_cq_set_opt_mode(priv);
 	if (err)
 		goto error;
@@ -201,9 +205,15 @@ static int zeno_usb_close(struct net_device *netdev)
 
 	netif_stop_queue(netdev);
 
-	err = zeno_cq_stop_bus_off(priv);
-	if (err)
-		netdev_warn(netdev, "Cannot stop device, error %d\n", err);
+    if (!priv->dev->device_disconnected) {
+        err = zeno_cq_stop_bus_off(priv);
+        if (err)
+            netdev_warn(netdev, "Cannot stop device, error %d\n", err);
+
+        err = zeno_cq_close(priv);
+        if (err)
+            netdev_warn(netdev, "Cannot close device, error %d\n", err);
+    }
 
 	/* reset tx contexts */
 	zeno_usb_unlink_tx_urbs(priv);
@@ -239,6 +249,8 @@ static void zeno_usb_unlink_all_urbs(struct zeno_usb *dev)
 		usb_free_coherent(dev->udev, ZENO_USB_RX_BUFFER_SIZE,
 				  dev->rxbuf[i], dev->rxbuf_dma[i]);
 
+    dev->rx_init_done = false;
+    
 	for (i = 0; i < dev->nr_of_can_channels; i++) {
 		struct zeno_usb_net_priv *priv = dev->nets[i];
 
@@ -309,7 +321,7 @@ static int zeno_usb_init_one(struct zeno_usb *dev,
     
     if (channel >= 0 && channel <= 3) {
         /* Channel 1-4 - CAN FD */
-        priv->can.ctrlmode_supported |= CAN_CTRLMODE_FD;
+        priv->can.ctrlmode_supported |= CAN_CTRLMODE_FD | CAN_CTRLMODE_FD_NON_ISO;
         priv->can.clock.freq = dev->clock_freq_ch14;
         priv->can.bittiming_const = dev->bittiming_const_ch14;
         priv->can.data_bittiming_const = dev->data_bittiming_const_ch14;
@@ -451,6 +463,7 @@ static void zeno_usb_disconnect(struct usb_interface *intf)
 
     if (!dev || dev->clock_int_intf == intf) return;
 
+    dev->device_disconnected = true;
     udev = interface_to_usbdev(intf);
 	zeno_usb_remove_interfaces(dev);
 

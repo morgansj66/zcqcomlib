@@ -89,8 +89,17 @@ struct zeno_usb_net_priv
 
 	struct zeno_usb *dev;
 	struct net_device *netdev;
+
 	int channel;
 
+    ZenoCANFDMessageP1 canfd_p1;
+    bool canfd_p1_received;
+    ZenoCANFDMessageP2 canfd_p2;
+    bool canfd_p2_received;
+    
+    s64 open_start_ref_timestamp_in_us;
+    unsigned int base_clock_divisor;
+    
     struct usb_anchor tx_anchor;
 
     int tx_fifo_size;

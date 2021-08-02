@@ -52,7 +52,6 @@ static void zeno_usb_read_bulk_callback(struct urb *urb)
 		dev_info(&dev->intf->dev, "Rx URB aborted (%d)\n", urb->status);
 		goto resubmit_urb;
 	}
-    printk(KERN_DEBUG "Zeno RCB: %d\n", urb->actual_length);
 	zeno_cq_read_bulk_callback(dev, urb->transfer_buffer,
                                urb->actual_length);
     

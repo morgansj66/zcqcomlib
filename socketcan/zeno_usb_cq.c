@@ -1195,8 +1195,6 @@ int zeno_cq_set_bittiming(struct net_device *netdev)
     struct zeno_usb_net_priv *net = netdev_priv(netdev);
 	struct can_bittiming *bt = &net->can.bittiming;
 
-    printk(KERN_DEBUG "zeno_cq_set_bittiming\n");
-
     net->bitrate_is_set = true;    
     if (!net->is_open)
         return 0;
@@ -1232,7 +1230,7 @@ int zeno_cq_set_bittiming(struct net_device *netdev)
 
         cmd.cicfg1 = (u16)((bt->brp-1) & 0x3f) | (((bt->sjw-1) & 0x3) << 6);
         cmd.cicfg2 = (u16)((bt->prop_seg-1) & 0x7) | (((bt->phase_seg1-1) & 0x7) <<3) | (1 << 7) |
-            (((bt->phase_seg1-1) & 0x7) << 8);
+            (((bt->phase_seg2-1) & 0x7) << 8);
     }
     
     err = zeno_cq_send_cmd_and_wait_reply(net->dev,zenoRequest(cmd),zenoReply(reply));
@@ -1250,8 +1248,6 @@ int zeno_cq_set_data_bittiming(struct net_device *netdev)
     struct zeno_usb_net_priv *net = netdev_priv(netdev);
     struct can_bittiming *bt = &net->can.data_bittiming;
 
-    printk(KERN_DEBUG "zeno_cq_set_data_bittiming\n");
-    
     net->data_bitrate_is_set = true;
     if (!net->is_open)
         return 0;

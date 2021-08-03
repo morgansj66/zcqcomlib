@@ -34,7 +34,7 @@ struct zeno_usb
     struct usb_endpoint_descriptor *bulk_in, *bulk_out;
     struct usb_endpoint_descriptor *clock_int_in;
 	struct usb_anchor rx_anchor;
-    
+
     u32 firmware_version;
     u32 capabilities;
     u32 serial_number;
@@ -90,6 +90,10 @@ struct zeno_usb_net_priv
 	struct zeno_usb *dev;
 	struct net_device *netdev;
 
+    bool is_open;
+    bool bitrate_is_set;
+    bool data_bitrate_is_set;
+    
 	int channel;
 
     ZenoCANFDMessageP1 canfd_p1;

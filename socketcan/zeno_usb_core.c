@@ -273,12 +273,18 @@ static netdev_tx_t zeno_usb_start_xmit(struct sk_buff *skb,
         echo_index = net->tx_write_i;
         tx_msg = &net->tx_fifo[net->tx_write_i];
         net->tx_write_i = next_tx_write_i;
+
+        /* Check if FIFO is full */
+        next_tx_write_i = (net->tx_write_i + 1) % net->tx_fifo_size;
+        if (next_tx_write_i == net->tx_read_i) {
+            netif_stop_queue(netdev);
+        }
     }
     spin_unlock_irqrestore(&net->tx_fifo_lock, flags);
 
     /* This should never happen; it implies a flow control bug */
 	if (!tx_msg) {
-		netdev_warn(netdev, "TX fifo overflow\n");
+		netdev_warn(netdev, "TX fifo overflow R %d W %d\n", net->tx_read_i, net->tx_write_i);
 
 		ret = NETDEV_TX_BUSY;
 		goto freeurb;

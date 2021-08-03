@@ -294,13 +294,16 @@ void zeno_cq_handle_tx_ack(struct zeno_usb *dev, ZenoTxCANRequestAck* can_tx_ack
     spin_lock_irqsave(&net->tx_fifo_lock, irq_flags);
 
     while (net->tx_read_i != net->tx_write_i) {
-        tx_msg = &net->tx_fifo[net->tx_read_i];
+        int rx_index = net->tx_read_i;
+        net->tx_read_i = (net->tx_read_i + 1) % net->tx_fifo_size;
+        
+        tx_msg = &net->tx_fifo[rx_index];
 
         if (tx_msg->transaction_id == can_tx_ack->trans_id) {
             stats->tx_packets++;
             stats->tx_bytes += tx_msg->dlc;            
 
-            can_get_echo_skb(net->netdev, net->tx_read_i);
+            can_get_echo_skb(net->netdev, rx_index);
             netif_wake_queue(net->netdev);
             break;
         }
@@ -309,8 +312,7 @@ void zeno_cq_handle_tx_ack(struct zeno_usb *dev, ZenoTxCANRequestAck* can_tx_ack
             netdev_warn(net->netdev, "TX message out of order %d != %d R%d W%d\n",
                         tx_msg->transaction_id, can_tx_ack->trans_id,
                         net->tx_read_i, net->tx_write_i);
-        }
-        net->tx_read_i = (net->tx_read_i + 1) % net->tx_fifo_size;
+        }        
     }    
     spin_unlock_irqrestore(&net->tx_fifo_lock, irq_flags);
 }
@@ -1004,7 +1006,7 @@ int zeno_cq_start_clock_int(struct zeno_usb *dev)
     memset(&cmd, 0, sizeof(cmd));
     cmd.h.cmd_id = ZEMO_CMD_START_CLOCK_INT;
 
-    printk(KERN_DEBUG "Sending Start-Clock INT cmd");
+    printk(KERN_DEBUG "Sending Start-Clock INT cmd\n");
     dev->init_calibrate_count = 7;
     err = zeno_cq_send_cmd_and_wait_reply(dev,&cmd,&reply);
 
@@ -1064,7 +1066,25 @@ int zeno_cq_open(struct zeno_usb_net_priv *net)
     net->open_start_ref_timestamp_in_us = (s64)reply.clock_start_ref;
     net->base_clock_divisor = reply.base_clock_divisor;
     net->base_clock_divisor = max(net->base_clock_divisor,1u);
-        
+
+    net->is_open = true;
+
+    if (net->bitrate_is_set) {
+        err = zeno_cq_set_bittiming(net->netdev);
+        if (err) {
+            net->is_open = false;
+            return err;
+        }
+    }
+    
+    if ((net->can.ctrlmode & CAN_CTRLMODE_FD) && net->data_bitrate_is_set) {
+        err = zeno_cq_set_data_bittiming(net->netdev);
+        if (err) {
+            net->is_open = false;
+            return err;
+        }
+    }
+    
     return 0;
 }
 
@@ -1078,10 +1098,12 @@ int zeno_cq_close(struct zeno_usb_net_priv *net)
     cmd.h.cmd_id = ZENO_CMD_CLOSE;
     cmd.channel = (u8)net->channel;
 
+    net->is_open = false;
+    
     err = zeno_cq_send_cmd_and_wait_reply(net->dev,zenoRequest(cmd),zenoReply(reply));
     if (err)
         return err;
-    
+
     return 0;
 }
 
@@ -1099,6 +1121,8 @@ int zeno_cq_start_bus_on(struct zeno_usb_net_priv *net)
     if (err)
         return err;
 
+    netif_start_queue(net->netdev);
+    
     return 0;
 }
 
@@ -1171,6 +1195,12 @@ int zeno_cq_set_bittiming(struct net_device *netdev)
     struct zeno_usb_net_priv *net = netdev_priv(netdev);
 	struct can_bittiming *bt = &net->can.bittiming;
 
+    printk(KERN_DEBUG "zeno_cq_set_bittiming\n");
+
+    net->bitrate_is_set = true;    
+    if (!net->is_open)
+        return 0;
+    
     memset(&cmd,0,sizeof(ZenoBitTiming));
     cmd.h.cmd_id = ZENO_CMD_SET_BIT_TIMING;
     cmd.channel = (u8)net->channel;
@@ -1208,7 +1238,7 @@ int zeno_cq_set_bittiming(struct net_device *netdev)
     err = zeno_cq_send_cmd_and_wait_reply(net->dev,zenoRequest(cmd),zenoReply(reply));
     if (err)
         return err;
-    
+
     return 0;
 }
 
@@ -1220,6 +1250,12 @@ int zeno_cq_set_data_bittiming(struct net_device *netdev)
     struct zeno_usb_net_priv *net = netdev_priv(netdev);
     struct can_bittiming *bt = &net->can.data_bittiming;
 
+    printk(KERN_DEBUG "zeno_cq_set_data_bittiming\n");
+    
+    net->data_bitrate_is_set = true;
+    if (!net->is_open)
+        return 0;
+    
     memset(&cmd,0,sizeof(ZenoBitTiming));
     cmd.h.cmd_id = ZENO_CMD_SET_DATA_BIT_TIMING;
     cmd.channel = (u8)net->channel;

@@ -77,7 +77,7 @@ struct zeno_usb
 
 struct zeno_tx_message
 {
-    struct zeno_usb_net_priv *priv;
+    struct zeno_usb_net_priv *net;
 	int transaction_id;
 	int dlc;
 };
@@ -102,6 +102,7 @@ struct zeno_usb_net_priv
     
     struct usb_anchor tx_anchor;
 
+    int next_transaction_id;
     int tx_fifo_size;
 
     spinlock_t tx_fifo_lock;
@@ -126,5 +127,11 @@ int zeno_cq_set_bittiming(struct net_device *netdev);
 int zeno_cq_set_data_bittiming(struct net_device *netdev);
 int zeno_cq_get_berr_counter(const struct net_device *netdev, struct can_berr_counter *bec);    
 void zeno_cq_read_bulk_callback(struct zeno_usb *dev,void *in_buffer, int bytes_transferred);
+void *zeno_cq_canfd_frame_to_cmd(struct zeno_usb_net_priv *priv,
+                                 const struct sk_buff *skb, int *frame_len,
+                                 int *cmd_len, int* transaction_id);
+void *zeno_cq_can_frame_to_cmd(struct zeno_usb_net_priv *priv,
+                               const struct sk_buff *skb, int *frame_len,
+                               int *cmd_len, int* transaction_id);
 
 #endif /*  ZENO_USB_H */

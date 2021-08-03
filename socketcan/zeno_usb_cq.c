@@ -101,6 +101,21 @@ static struct zeno_usb_net_priv * zeno_usb_net_priv_from_can_rx(const struct zen
 	return net;
 }
 
+static struct zeno_usb_net_priv * zeno_usb_hydra_net_priv_from_tx_ack(const struct zeno_usb *dev,
+                                                                      const ZenoTxCANRequestAck *can_tx_ack)
+{
+    struct zeno_usb_net_priv *net = NULL;
+	u8 channel = can_tx_ack->channel;
+
+	if (channel >= dev->nr_of_can_channels)
+		dev_err(&dev->intf->dev,
+                "Invalid channel number (%d)\n", channel);
+	else
+		net = dev->nets[channel];
+
+	return net;
+}
+
 static struct zeno_usb_net_priv * zeno_usb_net_priv_from_canfd_p1_rx(const struct zeno_usb *dev,
                                                                      const ZenoCANFDMessageP1 *canfd_rx)
 {
@@ -258,6 +273,46 @@ static void zeno_cq_can_rx_overrun(struct zeno_usb_net_priv *net)
 	stats->rx_packets++;
 	stats->rx_bytes += cf->can_dlc;
 	netif_rx(skb);
+}
+
+void zeno_cq_handle_tx_ack(struct zeno_usb *dev, ZenoTxCANRequestAck* can_tx_ack)
+{
+    struct zeno_tx_message *tx_msg;
+	struct zeno_usb_net_priv *net;
+    struct net_device_stats *stats;
+	unsigned long irq_flags;
+    
+	net = zeno_usb_hydra_net_priv_from_tx_ack(dev, can_tx_ack);
+	if (!net)
+		return;
+
+    stats = &net->netdev->stats;
+    
+    if (!netif_device_present(net->netdev))
+		return;
+
+    spin_lock_irqsave(&net->tx_fifo_lock, irq_flags);
+
+    while (net->tx_read_i != net->tx_write_i) {
+        tx_msg = &net->tx_fifo[net->tx_read_i];
+
+        if (tx_msg->transaction_id == can_tx_ack->trans_id) {
+            stats->tx_packets++;
+            stats->tx_bytes += tx_msg->dlc;            
+
+            can_get_echo_skb(net->netdev, net->tx_read_i);
+            netif_wake_queue(net->netdev);
+            break;
+        }
+        else {
+            /* Should never happen */
+            netdev_warn(net->netdev, "TX message out of order %d != %d R%d W%d\n",
+                        tx_msg->transaction_id, can_tx_ack->trans_id,
+                        net->tx_read_i, net->tx_write_i);
+        }
+        net->tx_read_i = (net->tx_read_i + 1) % net->tx_fifo_size;
+    }    
+    spin_unlock_irqrestore(&net->tx_fifo_lock, irq_flags);
 }
 
 void zeno_cq_handle_rx_can(struct zeno_usb *dev, ZenoCAN20Message* can_rx)
@@ -494,7 +549,8 @@ static void zeno_cq_handle_command(struct zeno_usb *dev, ZenoCmd* zeno_cmd)
 {
     switch(zeno_cmd->h.cmd_id) {
     case ZENO_CMD_CAN_TX_ACK: {
-        printk(KERN_DEBUG "Zeno CAN Tx\n");
+        ZenoTxCANRequestAck* zeno_can_tx_ack = (ZenoTxCANRequestAck*)zeno_cmd;
+        zeno_cq_handle_tx_ack(dev, zeno_can_tx_ack);
         break;
     }
     case ZENO_CMD_CAN_RX: {
@@ -1249,4 +1305,131 @@ int zeno_cq_get_berr_counter(const struct net_device *netdev, struct can_berr_co
     *bec = net->bec;
     
     return 0;
+}
+
+void *zeno_cq_canfd_frame_to_cmd(struct zeno_usb_net_priv *net,
+                                 const struct sk_buff *skb, int *frame_len,
+                                 int *cmd_len, int* transaction_id)
+{
+    struct canfd_frame *cf = (struct canfd_frame *)skb->data;
+    ZenoTxCANFDRequestP1* p1_request = NULL;
+    ZenoTxCANFDRequestP2* p2_request = NULL;
+    ZenoTxCANFDRequestP3* p3_request = NULL;
+    void* cmd_buffer;
+
+    *frame_len = cf->len;
+    
+    if (cf->len > 48) {
+        cmd_buffer = kmalloc(ZENO_CMD_SIZE * 3, GFP_ATOMIC);
+        if (!cmd_buffer)
+            return NULL;
+
+        *cmd_len = ZENO_CMD_SIZE * 3;
+        
+        p1_request = cmd_buffer;
+        p2_request = cmd_buffer + ZENO_CMD_SIZE;
+        p3_request = cmd_buffer + ZENO_CMD_SIZE * 2;
+    }
+    else if (cf->len > 20) {
+        cmd_buffer = kmalloc(ZENO_CMD_SIZE * 2, GFP_ATOMIC);
+        if (!cmd_buffer)
+            return NULL;
+
+        *cmd_len = ZENO_CMD_SIZE * 2;
+        
+        p1_request = cmd_buffer;
+        p2_request = cmd_buffer + ZENO_CMD_SIZE;
+    }
+    else {
+        cmd_buffer = kmalloc(ZENO_CMD_SIZE * 3, GFP_ATOMIC);
+        if (!cmd_buffer)
+            return NULL;
+
+        *cmd_len = ZENO_CMD_SIZE;
+        
+        p1_request = cmd_buffer;
+    }
+
+    p1_request->h.cmd_id = ZENO_CMD_CANFD_P1_TX_REQUEST;
+    p1_request->h.transaction_id = net->next_transaction_id & 0x7f;
+    p1_request->channel = (u8)net->channel;
+    *transaction_id = p1_request->h.transaction_id;
+    net->next_transaction_id ++;
+    
+    p1_request->dlc = cf->len;
+    p1_request->flags = ZenoCANFlagFD;
+
+	if (cf->can_id & CAN_EFF_FLAG) {
+		p1_request->id = cf->can_id & CAN_EFF_MASK;
+		p1_request->flags = ZenoCANFlagExtended;
+	} else {
+		p1_request->id = cf->can_id & CAN_SFF_MASK;
+		p1_request->flags = ZenoCANFlagStandard;
+	}
+
+    if (cf->flags | CANFD_BRS)
+        p1_request->flags = ZenoCANFlagFDBRS;
+
+    memcpy(p1_request->data, cf->data, min_t(__u8, 20, cf->len));
+
+    if (cf->len > 20) {
+        p2_request->h.cmd_id = ZENO_CMD_CANFD_P2_TX_REQUEST;
+        p2_request->h.transaction_id = p1_request->h.transaction_id;
+        p2_request->channel = (u8)net->channel;
+        p2_request->dlc = p1_request->dlc;
+
+        memcpy(p2_request->data, cf->data+20, min_t(__u8, 28, cf->len-20));
+
+        if (cf->len > 48) {
+            p3_request->h.cmd_id = ZENO_CMD_CANFD_P3_TX_REQUEST;
+            p3_request->h.transaction_id = p1_request->h.transaction_id;
+            p3_request->channel = (u8)net->channel;
+            p3_request->dlc = p1_request->dlc;
+
+            memcpy(p3_request->data, cf->data+48, min_t(__u8, 16, cf->len-48));
+        }
+    }
+    
+    return cmd_buffer;
+}
+
+void *zeno_cq_can_frame_to_cmd(struct zeno_usb_net_priv *net,
+                               const struct sk_buff *skb, int *frame_len,
+                               int *cmd_len, int* transaction_id)
+{
+    struct can_frame *cf = (struct can_frame *)skb->data;
+    ZenoTxCAN20Request* request;
+    void* cmd_buffer;
+
+    *frame_len = cf->can_dlc;
+
+    cmd_buffer = kmalloc(ZENO_CMD_SIZE, GFP_ATOMIC);
+    if (!cmd_buffer)
+        return NULL;
+    
+    *cmd_len = ZENO_CMD_SIZE;
+    
+    request = cmd_buffer;
+
+    request->h.cmd_id = ZENO_CMD_CAN20_TX_REQUEST;
+    request->channel = (u8)net->channel;
+    request->h.transaction_id = net->next_transaction_id & 0x7f;
+    request->dlc = cf->can_dlc;
+    *transaction_id = request->h.transaction_id;
+    net->next_transaction_id ++;
+
+    if (cf->can_id & CAN_EFF_FLAG) {
+		request->id = cf->can_id & CAN_EFF_MASK;
+		request->flags = ZenoCANFlagExtended;
+	} else {
+		request->id = cf->can_id & CAN_SFF_MASK;
+		request->flags = ZenoCANFlagStandard;
+	}
+
+    if (cf->can_id | CAN_RTR_FLAG)
+        request->flags |= CAN_RTR_FLAG;
+
+    memcpy(request->data, cf->data, min_t(__u8, 8, cf->can_dlc));
+    
+    return cmd_buffer;
 }

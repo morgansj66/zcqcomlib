@@ -223,11 +223,122 @@ static int zeno_usb_close(struct net_device *netdev)
 	return 0;
 }
 
+static void zeno_usb_write_bulk_callback(struct urb *urb)
+{
+	struct zeno_tx_message *tx_msg = urb->context;
+	struct zeno_usb_net_priv *net;
+	struct net_device *netdev;
+    
+	if (WARN_ON(!tx_msg))
+		return;
+
+	net = tx_msg->net;
+	netdev = net->netdev;
+
+	kfree(urb->transfer_buffer);
+
+	if (!netif_device_present(netdev))
+		return;
+
+	if (urb->status)
+		netdev_info(netdev, "Tx URB aborted (%d)\n", urb->status);
+}
+
 static netdev_tx_t zeno_usb_start_xmit(struct sk_buff *skb,
                                        struct net_device *netdev)
 {
-    int ret;
+	struct zeno_usb_net_priv *net = netdev_priv(netdev);
+	struct zeno_usb *dev = net->dev;
+	struct net_device_stats *stats = &netdev->stats;
+	struct zeno_tx_message *tx_msg = NULL;
+	struct urb *urb;
+    unsigned long flags;
+    int next_tx_write_i, echo_index, ret, err;
+    void *cmd_buffer;
+    int cmd_len;
+    
+    if (can_dropped_invalid_skb(netdev, skb))
+		return NETDEV_TX_OK;
+
+	urb = usb_alloc_urb(0, GFP_ATOMIC);
+	if (!urb) {
+		stats->tx_dropped++;
+		dev_kfree_skb(skb);
+		return NETDEV_TX_OK;
+	}
+
+    spin_lock_irqsave(&net->tx_fifo_lock, flags);
+    next_tx_write_i = (net->tx_write_i + 1) % net->tx_fifo_size;
+    if (next_tx_write_i != net->tx_read_i) {
+        echo_index = net->tx_write_i;
+        tx_msg = &net->tx_fifo[net->tx_write_i];
+        net->tx_write_i = next_tx_write_i;
+    }
+    spin_unlock_irqrestore(&net->tx_fifo_lock, flags);
+
+    /* This should never happen; it implies a flow control bug */
+	if (!tx_msg) {
+		netdev_warn(netdev, "TX fifo overflow\n");
+
+		ret = NETDEV_TX_BUSY;
+		goto freeurb;
+	}
+
+    if (can_is_canfd_skb(skb))
+        cmd_buffer = zeno_cq_canfd_frame_to_cmd(net,skb,&tx_msg->dlc,&cmd_len,&tx_msg->transaction_id);
+    else
+        cmd_buffer = zeno_cq_can_frame_to_cmd(net,skb,&tx_msg->dlc,&cmd_len,&tx_msg->transaction_id);
+
+    if (!cmd_buffer) {
+		stats->tx_dropped++;
+		dev_kfree_skb(skb);
+
+        spin_lock_irqsave(&net->tx_fifo_lock, flags);
+        net->tx_write_i = (net->tx_write_i - 1) % net->tx_fifo_size;        
+		netif_wake_queue(netdev);
+		spin_unlock_irqrestore(&net->tx_fifo_lock, flags);
+        
+		goto freeurb;
+	}
+
+    tx_msg->net = net;
+    can_put_echo_skb(skb, netdev, echo_index);
+    
+    usb_fill_bulk_urb(urb, dev->udev,
+                      usb_sndbulkpipe(dev->udev,
+                                      dev->bulk_out->bEndpointAddress),
+                      cmd_buffer, cmd_len, zeno_usb_write_bulk_callback,
+                      tx_msg);
+	usb_anchor_urb(urb, &net->tx_anchor);
+
+    err = usb_submit_urb(urb, GFP_ATOMIC);
+	if (unlikely(err)) {
+		spin_lock_irqsave(&net->tx_fifo_lock, flags);
+        
+		can_free_echo_skb(netdev, echo_index);
+		net->tx_write_i = (net->tx_write_i - 1) % net->tx_fifo_size;
+		netif_wake_queue(netdev);
+        
+		spin_unlock_irqrestore(&net->tx_fifo_lock, flags);
+        
+		usb_unanchor_urb(urb);
+		kfree(cmd_buffer);
+        
+		stats->tx_dropped++;
+        
+		if (err == -ENODEV)
+			netif_device_detach(netdev);
+		else
+			netdev_warn(netdev, "Failed tx_urb %d\n", err);
+        
+		goto freeurb;
+	}
+
     ret = NETDEV_TX_OK;
+    
+ freeurb:
+    usb_free_urb(urb);
+    
     return ret;
 }
 
@@ -303,7 +414,7 @@ static int zeno_usb_init_one(struct zeno_usb *dev,
 
 	priv = netdev_priv(netdev);
 
-    priv->tx_fifo_size = tx_fifo_size + 1;
+    priv->tx_fifo_size = tx_fifo_size;
 
 	init_usb_anchor(&priv->tx_anchor);
 	priv->can.ctrlmode_supported = 0;

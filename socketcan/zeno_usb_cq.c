@@ -898,6 +898,7 @@ int zeno_cq_get_device_info(struct zeno_usb *dev)
     printk(KERN_DEBUG "CAN channel count: %d\n",info.can_channel_count);
     printk(KERN_DEBUG "LIN channel count: %d\n",info.lin_channel_count);
 
+    dev->capabilities = info.capabilities;
     dev->system_clock_resolution = info.clock_resolution;
     dev->serial_number = info.serial_number;
     dev->firmware_version = info.fw_version;

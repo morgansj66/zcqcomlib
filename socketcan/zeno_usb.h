@@ -18,6 +18,10 @@
 
 #include "zenocan.h"
 
+#define ZURAGON_VENDOR_ID               0x84d8
+#define ZENO_CANQUATRO_USB_ID           0x15
+#define ZENO_CANQUATRO_MPCIE_USB_ID     0x16
+
 #define ZENO_USB_TIMEOUT		  1000 /* msecs */
 #define ZENO_USB_RX_BUFFER_SIZE   4096
 #define ZENO_USB_INT_BUFFER_SIZE  16
@@ -137,5 +141,11 @@ void *zeno_cq_canfd_frame_to_cmd(struct zeno_usb_net_priv *priv,
 void *zeno_cq_can_frame_to_cmd(struct zeno_usb_net_priv *priv,
                                const struct sk_buff *skb, int *frame_len,
                                int *cmd_len, int* transaction_id);
+
+/* Zeno proc fs */
+int zeno_procfs_init(void);
+void zeno_procfs_cleanup(void);
+int zeno_procfs_register_dev(struct zeno_usb* dev);
+int zeno_procfs_remove_dev(struct zeno_usb* dev);
 
 #endif /*  ZENO_USB_H */

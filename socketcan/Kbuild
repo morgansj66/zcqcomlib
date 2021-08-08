@@ -6,4 +6,4 @@
 #
 
 obj-m += zeno_usb.o
-zeno_usb-y = zeno_usb_core.o zeno_usb_cq.o
+zeno_usb-y = zeno_usb_core.o zeno_usb_cq.o zeno_usb_procfs.o

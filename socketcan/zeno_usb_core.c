@@ -23,10 +23,6 @@
 
 #include "zeno_usb.h"
 
-#define ZURAGON_VENDOR_ID               0x84d8
-#define ZENO_CANQUATRO_USB_ID           0x15
-#define ZENO_CANQUATRO_MPCIE_USB_ID     0x16
-
 static const struct usb_device_id zeno_usb_table[] = {
 	/* Leaf USB product IDs */
 	{ USB_DEVICE(ZURAGON_VENDOR_ID, ZENO_CANQUATRO_USB_ID) },
@@ -568,6 +564,8 @@ static int zeno_usb_probe(struct usb_interface *intf,
 		}
 	}
 
+    zeno_procfs_register_dev(dev);
+        
     return 0;    
 }
 
@@ -582,7 +580,8 @@ static void zeno_usb_disconnect(struct usb_interface *intf)
     dev->device_disconnected = true;
     udev = interface_to_usbdev(intf);
 	zeno_usb_remove_interfaces(dev);
-
+    zeno_procfs_remove_dev(dev);
+    
 	usb_set_intfdata(intf, NULL);
     usb_set_intfdata(dev->clock_int_intf, NULL);
     dev_set_drvdata(&udev->dev, NULL);
@@ -595,7 +594,31 @@ static struct usb_driver zeno_usb_driver = {
 	.id_table = zeno_usb_table,
 };
 
-module_usb_driver(zeno_usb_driver);
+static int zeno_usb_init(void)
+{
+    int err;
+    printk(KERN_DEBUG "Zeno module init\n");
+
+    err = zeno_procfs_init();
+    if (err)
+        return err;
+    
+    err = usb_register(&zeno_usb_driver);
+    if (err)
+        return err;
+    
+    return 0;
+}
+
+static void zeno_usb_cleanup(void)
+{
+    printk(KERN_DEBUG "Zeno module cleanup\n");
+    zeno_procfs_cleanup();
+    usb_deregister(&zeno_usb_driver);
+}
+
+module_init(zeno_usb_init);
+module_exit(zeno_usb_cleanup);
 
 MODULE_AUTHOR("Zuragon LTd <support@zuragon.com>");
 MODULE_DESCRIPTION("USB driver for Zeno CANquatro devices");

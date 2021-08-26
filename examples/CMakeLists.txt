@@ -6,6 +6,9 @@ project(6chrxtest CXX)
 
 # set the C++14 standard
 set(CMAKE_CXX_STANDARD 14)
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+endif ()
 
 # I../includes
 include_directories(include)

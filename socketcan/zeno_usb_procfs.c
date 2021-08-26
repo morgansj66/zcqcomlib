@@ -33,16 +33,16 @@ static int zeno_procfs_show(struct seq_file *m, void *v)
         struct zeno_usb *dev = d->zeno_device_list[i];
         switch(dev->udev->descriptor.idProduct) {
         case ZENO_CANQUATRO_USB_ID:
-            seq_printf(m, "dev%02d: \"Zeno CANquatro\" ", i);
+            seq_printf(m, "dev%02d#Zeno CANquatro#", i);
             break;
         case ZENO_CANQUATRO_MPCIE_USB_ID:
-            seq_printf(m, "dev%02d: \"Zeno CANquatro mPCIe\" ", i);
+            seq_printf(m, "dev%02d#Zeno CANquatro mPCIe#", i);
             break;
         default:
-            seq_printf(m, "dev%02d: \"Zeno unknown\" ",i);
+            seq_printf(m, "dev%02d#Zeno unknown#",i);
         }
 
-        seq_printf(m, "cap:%08x fw:%08x serial:%08x clock:%d devpath:\"%s\"\n",
+        seq_printf(m, "cap:%08x#fw:%08x#serial:%08x#clock:%d#devpath:%s\n",
                    dev->capabilities,
                    dev->firmware_version,
                    dev->serial_number,

@@ -240,7 +240,7 @@ static void zeno_cq_can_rx_error_frame(struct zeno_usb_net_priv *net, u32 id, u8
     }
 
 	shhwtstamps = skb_hwtstamps(skb);
-	shhwtstamps->hwtstamp = hw_tstamp;
+	shhwtstamps->hwtstamp = ns_to_ktime(hw_tstamp * 1000);
 
     cf->can_id |= CAN_ERR_BUSERROR;
 	cf->data[6] = net->bec.txerr;
@@ -347,7 +347,7 @@ void zeno_cq_handle_rx_can(struct zeno_usb *dev, ZenoCAN20Message* can_rx)
 	}
 
 	shhwtstamps = skb_hwtstamps(skb);
-	shhwtstamps->hwtstamp = hw_tstamp;
+	shhwtstamps->hwtstamp = ns_to_ktime(hw_tstamp * 1000);
 
 	cf->can_id = le32_to_cpu(can_rx->id);
 
@@ -364,7 +364,7 @@ void zeno_cq_handle_rx_can(struct zeno_usb *dev, ZenoCAN20Message* can_rx)
     if (can_rx->flags & ZenoCANFlagRTR)
         cf->can_id |= CAN_RTR_FLAG;
     
-    cf->can_dlc = get_can_dlc(can_rx->dlc);
+    cf->can_dlc = can_cc_dlc2len(can_rx->dlc);
 
     memcpy(cf->data, can_rx->data, cf->can_dlc);
     
@@ -402,7 +402,7 @@ static struct canfd_frame* zeno_cq_fill_rx_canfd_p1(struct zeno_usb_net_priv *ne
     }
 	    
     shhwtstamps = skb_hwtstamps(skb);
-	shhwtstamps->hwtstamp = hw_tstamp;
+	shhwtstamps->hwtstamp = ns_to_ktime(hw_tstamp * 1000);
     
 	cf->can_id = le32_to_cpu(canfd_rx->id);
     
@@ -423,7 +423,7 @@ static struct canfd_frame* zeno_cq_fill_rx_canfd_p1(struct zeno_usb_net_priv *ne
         if (canfd_rx->flags & ZenoCANFlagFDBRS)
             cf->flags |= CANFD_BRS;
     } else {
-        cf->len = get_can_dlc(canfd_rx->dlc);
+        cf->len = can_cc_dlc2len(canfd_rx->dlc);
         
         if (canfd_rx->flags & ZenoCANFlagRTR)
             cf->can_id |= CAN_RTR_FLAG;
@@ -643,6 +643,7 @@ static void zeno_cq_handle_int_command(struct zeno_usb *dev, ZenoIntCmd* zeno_in
         }
                 
         host_t0 = ktime_get() - dev->t2_clock_start_ref;
+        // printk("host_t0 %Ld\n", host_t0 / 1000);
         
         clock_info = (ZenoIntClockInfoCmd*)zeno_int_cmd;
         dev->last_usb_overflow_count += clock_info->usb_overflow_count;
@@ -1032,6 +1033,29 @@ int zeno_cq_stop_clock_int(struct zeno_usb *dev)
     if (err)
         return err;
 
+    return 0;
+}
+
+int zeno_cq_get_device_clock(struct zeno_usb *dev, u64* device_clock, u64* drift_clock, s64 *time_drift)
+{
+    int err;
+    ZenoReadClock cmd;
+    ZenoReadClockResponse reply;
+
+    memset(&cmd,0,sizeof(ZenoBusOn));
+    cmd.h.cmd_id = ZENO_CMD_READ_CLOCK;
+    cmd.channel = 4;
+
+    err = zeno_cq_send_cmd_and_wait_reply(dev,zenoRequest(cmd),zenoReply(reply));
+    if (err)
+        return err;
+
+    *device_clock = (u64)reply.clock_value;
+    *device_clock /= reply.divisor;
+
+    *drift_clock = (u64)dev->last_device_time / 1000;
+    *time_drift = dev->drift_time / 1000;
+    
     return 0;
 }
 

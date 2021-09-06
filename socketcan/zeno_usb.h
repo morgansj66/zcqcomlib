@@ -125,6 +125,7 @@ int zeno_cq_device_reset(struct zeno_usb *dev);
 int zeno_cq_get_device_info(struct zeno_usb *dev);
 int zeno_cq_start_clock_int(struct zeno_usb *dev);
 int zeno_cq_stop_clock_int(struct zeno_usb *dev);
+int zeno_cq_get_device_clock(struct zeno_usb *dev, u64* device_clock, u64* drift_clock, s64 *time_drfit);
 int zeno_cq_open(struct zeno_usb_net_priv *net);
 int zeno_cq_close(struct zeno_usb_net_priv *net);
 int zeno_cq_start_bus_on(struct zeno_usb_net_priv *net);

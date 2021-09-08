@@ -57,7 +57,8 @@ struct zeno_usb
     unsigned int clock_freq_ch56;
     const struct can_bittiming_const * bittiming_const_ch56;
     unsigned int max_pending_tx_ch56;
-    
+
+    struct mutex cmd_lock;
     int zeno_response_cmd_id;
     ZenoResponse* zeno_response;
     bool reply_received;
@@ -84,6 +85,7 @@ struct zeno_tx_message
     struct zeno_usb_net_priv *net;
 	int transaction_id;
 	int dlc;
+    struct sk_buff *skb;
 };
 
 struct zeno_usb_net_priv

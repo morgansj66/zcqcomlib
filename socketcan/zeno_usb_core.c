@@ -180,8 +180,10 @@ static void zeno_usb_reset_tx_fifo(struct zeno_usb_net_priv *priv)
     
     priv->tx_read_i = priv->tx_write_i = 0;
 
-	for (i = 0; i < priv->tx_fifo_size; i++)
+	for (i = 0; i < priv->tx_fifo_size; i++) {
 		priv->tx_fifo[i].transaction_id = 0;
+        priv->tx_fifo[i].skb = NULL;
+    }
 }
 
 /* This method might sleep. Do not call it in the atomic context
@@ -304,6 +306,7 @@ static netdev_tx_t zeno_usb_start_xmit(struct sk_buff *skb,
 	}
 
     tx_msg->net = net;
+    tx_msg->skb = skb;
     can_put_echo_skb(skb, netdev, echo_index);
     
     usb_fill_bulk_urb(urb, dev->udev,
@@ -514,6 +517,7 @@ static int zeno_usb_probe(struct usb_interface *intf,
         if (!dev)
             return -ENOMEM;
         dev_set_drvdata(&udev->dev, dev);
+        mutex_init(&dev->cmd_lock);
     }
 
 	usb_set_intfdata(intf, dev);

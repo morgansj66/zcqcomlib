@@ -90,7 +90,7 @@ static int zeno_procfs_dev_show(struct seq_file *m, void *v)
     seq_write(m, &device_clock, sizeof(device_clock));
     seq_write(m, &drift_clock, sizeof(drift_clock));
     seq_write(m, &time_drift, sizeof(time_drift));
-    
+    seq_write(m, &dev->t2_clock_start_ref, sizeof(dev->t2_clock_start_ref));
 
     return 0;
 }

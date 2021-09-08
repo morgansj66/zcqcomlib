@@ -85,7 +85,6 @@ struct zeno_tx_message
     struct zeno_usb_net_priv *net;
 	int transaction_id;
 	int dlc;
-    struct sk_buff *skb;
 };
 
 struct zeno_usb_net_priv

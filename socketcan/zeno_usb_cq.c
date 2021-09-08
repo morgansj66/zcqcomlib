@@ -303,15 +303,19 @@ void zeno_cq_handle_tx_ack(struct zeno_usb *dev, ZenoTxCANRequestAck* can_tx_ack
         tx_msg = &net->tx_fifo[rx_index];
 
         if (tx_msg->transaction_id == can_tx_ack->trans_id) {
+            struct sk_buff *skb;
+
             stats->tx_packets++;
             stats->tx_bytes += tx_msg->dlc;            
 
-            hw_tstamp = can_tx_ack->timestamp | ((u64)can_tx_ack->timestamp_msb << 32);
-            hw_tstamp /= net->base_clock_divisor;
-            hw_tstamp += net->open_start_ref_timestamp_in_us;
+            if ((skb = net->can.echo_skb[rx_index]) != NULL)  {
+                hw_tstamp = can_tx_ack->timestamp | ((u64)can_tx_ack->timestamp_msb << 32);
+                hw_tstamp /= net->base_clock_divisor;
+                hw_tstamp += net->open_start_ref_timestamp_in_us;
             
-            shhwtstamps = skb_hwtstamps(tx_msg->skb);
-            shhwtstamps->hwtstamp = ns_to_ktime(hw_tstamp * 1000);
+                shhwtstamps = skb_hwtstamps(skb);
+                shhwtstamps->hwtstamp = ns_to_ktime(hw_tstamp * 1000);
+            }
 
             can_get_echo_skb(net->netdev, rx_index);
             netif_wake_queue(net->netdev);
